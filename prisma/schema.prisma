@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  
+  submittedEntries Entry[] @relation("SubmittedBy")
+  approvedEntries  Entry[] @relation("ApprovedBy")
+}
+
+model Entry {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  date            DateTime
+  line            String
+  shift           String
+  teamLeader      String
+  shiftInCharge   String
+  model           String
+  numOfOperators  Int
+  availableTime   String
+  lineCapacity    String
+  ppcTarget       Int
+  goodParts       Int
+  rejects         Int
+  problemHead     String
+  description     String
+  lossTime        Int
+  responsibility  String
+  
+  // Rejection details included directly in entry
+  rejectionPhenomena    String?
+  rejectionCause        String?
+  rejectionCorrectiveAction String?
+  rejectionCount        Int?
+  
+  status          Status
+  submittedById   String   @db.ObjectId
+  approvedById    String?  @db.ObjectId
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  submittedBy User  @relation("SubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  User? @relation("ApprovedBy", fields: [approvedById], references: [id])
+}
+
+model Parameter {
+  id     String        @id @default(auto()) @map("_id") @db.ObjectId
+  type   ParameterType @unique
+  values String[]
+}
+
+enum Role {
+  TEAM_LEADER
+  SUPERVISOR
+  ADMIN
+}
+
+enum Status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ParameterType {
+  LINE
+  SHIFT
+  MODEL
+  TEAM_LEADER
+  SHIFT_INCHARGE
+  AVAILABLE_TIME
+  LINE_CAPACITY
+  PROBLEM_HEAD
+  DESCRIPTION
+  RESPONSIBILITY
+}

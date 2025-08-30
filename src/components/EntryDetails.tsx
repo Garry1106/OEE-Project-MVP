@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useState } from 'react'
 import { Entry } from '@/types'
-import { 
+import {
   Calendar,
   Factory,
   Clock,
@@ -28,6 +28,7 @@ import {
   Settings,
   Edit
 } from 'lucide-react'
+import { calculateOEE, getOEECategory } from '@/lib/oee'
 
 interface EntryDetailsProps {
   entry: Entry
@@ -81,26 +82,26 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
 
   const getStatusBadge = (status: string) => {
     const config = {
-      PENDING: { 
-        variant: 'secondary' as const, 
-        icon: Clock, 
-        className: 'bg-yellow-500' 
+      PENDING: {
+        variant: 'secondary' as const,
+        icon: Clock,
+        className: 'bg-yellow-500'
       },
-      APPROVED: { 
-        variant: 'default' as const, 
-        icon: CheckCircle, 
-        className: 'bg-green-500' 
+      APPROVED: {
+        variant: 'default' as const,
+        icon: CheckCircle,
+        className: 'bg-green-500'
       },
-      REJECTED: { 
-        variant: 'destructive' as const, 
-        icon: XCircle, 
-        className: 'bg-red-500' 
+      REJECTED: {
+        variant: 'destructive' as const,
+        icon: XCircle,
+        className: 'bg-red-500'
       }
     }
-    
+
     const statusConfig = config[status as keyof typeof config]
     const Icon = statusConfig.icon
-    
+
     return (
       <Badge variant={statusConfig.variant} className={statusConfig.className}>
         <Icon className="w-4 h-4 mr-1" />
@@ -112,7 +113,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
   const getPerformanceIndicator = (value: number, type: 'efficiency' | 'rejectRate' | 'targetAchievement') => {
     let color = 'text-gray-600'
     let icon = Info
-    
+
     if (type === 'efficiency') {
       if (value >= 95) { color = 'text-green-600'; icon = Award }
       else if (value >= 85) { color = 'text-blue-600'; icon = TrendingUp }
@@ -176,6 +177,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
               <th className="border border-gray-300 px-4 py-2 text-left font-bold">Date</th>
               <th className="border border-gray-300 px-4 py-2 text-left font-bold">Line</th>
               <th className="border border-gray-300 px-4 py-2 text-left font-bold">Shift</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Hour</th>
               <th className="border border-gray-300 px-4 py-2 text-left font-bold">Model</th>
               <th className="border border-gray-300 px-4 py-2 text-left font-bold">Team Leader</th>
               <th className="border border-gray-300 px-4 py-2 text-left font-bold">Shift InCharge</th>
@@ -185,8 +187,8 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
           <tbody>
             <tr>
               <td className="border border-gray-300 px-4 py-3 font-normal">
-                {new Date(entry.date).toLocaleDateString('en-US', { 
-                  month: 'short', 
+                {new Date(entry.date).toLocaleDateString('en-US', {
+                  month: 'short',
                   day: 'numeric',
                   year: 'numeric'
                 })}
@@ -196,6 +198,11 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
               </td>
               <td className="border border-gray-300 px-4 py-3">
                 <Badge variant="outline">{entry.shift}</Badge>
+              </td>
+              <td className="border border-gray-300 px-4 py-3"> {/* Add this */}
+                <Badge variant="outline" className="font-medium text-blue-700">
+                  {entry.hour}
+                </Badge>
               </td>
               <td className="border border-gray-300 px-4 py-3">
                 <Badge variant="outline">{entry.model}</Badge>
@@ -375,6 +382,241 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
         </div>
       )}
 
+      {/* 4M Change Management */}
+      {entry.has4MChange && (
+        <div className="space-y-2">
+          <Label className="text-sm font-bold">4M Change Management</Label>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-300 text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold w-40">Category</th>
+                  <th className="border border-gray-300 px-4 py-2 text-center font-bold w-20">Changed</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold w-1/4">Description/Reason</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold w-1/4">Critical Characteristics (CC)</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold w-1/4">Significant Characteristics (SC)</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold w-1/4">General</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* MAN Row */}
+                <tr className="hover:bg-gray-50">
+                  <td className="border border-gray-300 px-4 py-3 font-semibold bg-gray-50">
+                    MAN
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3 text-center">
+                    <Badge variant={entry.manChange ? 'default' : 'secondary'} className="text-xs">
+                      {entry.manChange ? 'Yes' : 'No'}
+                    </Badge>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.manChange && entry.manReason ? (
+                        <span className="font-medium">{entry.manReason}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">No change</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.manChange && entry.manCC ? (
+                        <span className="font-medium">{entry.manCC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.manChange && entry.manSC ? (
+                        <span className="font-medium">{entry.manSC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.manChange && entry.manGeneral ? (
+                        <span className="font-medium">{entry.manGeneral}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+
+                {/* MACHINE Row */}
+                <tr className="hover:bg-gray-50">
+                  <td className="border border-gray-300 px-4 py-3 font-semibold bg-gray-50">
+                    MACHINE
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3 text-center">
+                    <Badge variant={entry.machineChange ? 'default' : 'secondary'} className="text-xs">
+                      {entry.machineChange ? 'Yes' : 'No'}
+                    </Badge>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.machineChange && entry.machineReason ? (
+                        <span className="font-medium">{entry.machineReason}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">No change</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.machineChange && entry.machineCC ? (
+                        <span className="font-medium">{entry.machineCC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.machineChange && entry.machineSC ? (
+                        <span className="font-medium">{entry.machineSC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.machineChange && entry.machineGeneral ? (
+                        <span className="font-medium">{entry.machineGeneral}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+
+                {/* MATERIAL Row */}
+                <tr className="hover:bg-gray-50">
+                  <td className="border border-gray-300 px-4 py-3 font-semibold bg-gray-50">
+                    MATERIAL
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3 text-center">
+                    <Badge variant={entry.materialChange ? 'default' : 'secondary'} className="text-xs">
+                      {entry.materialChange ? 'Yes' : 'No'}
+                    </Badge>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.materialChange && entry.materialReason ? (
+                        <span className="font-medium">{entry.materialReason}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">No change</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.materialChange && entry.materialCC ? (
+                        <span className="font-medium">{entry.materialCC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.materialChange && entry.materialSC ? (
+                        <span className="font-medium">{entry.materialSC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.materialChange && entry.materialGeneral ? (
+                        <span className="font-medium">{entry.materialGeneral}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+
+                {/* METHOD/TOOL/FIXTURE/DIE Row */}
+                <tr className="hover:bg-gray-50">
+                  <td className="border border-gray-300 px-4 py-3 font-semibold bg-gray-50">
+                    METHOD/TOOL/FIXTURE/DIE
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3 text-center">
+                    <Badge variant={entry.methodChange ? 'default' : 'secondary'} className="text-xs">
+                      {entry.methodChange ? 'Yes' : 'No'}
+                    </Badge>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.methodChange && entry.methodReason ? (
+                        <span className="font-medium">{entry.methodReason}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">No change</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.methodChange && entry.methodCC ? (
+                        <span className="font-medium">{entry.methodCC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.methodChange && entry.methodSC ? (
+                        <span className="font-medium">{entry.methodSC}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
+                      {entry.methodChange && entry.methodGeneral ? (
+                        <span className="font-medium">{entry.methodGeneral}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">-</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+
+      {/* 4M Summary Badge */}
+      {!entry.has4MChange && (
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">4M Change Management</Label>
+          <div className="p-4 border border-gray-300 text-center">
+            <Badge variant="secondary" className="text-sm">
+              No 4M Changes Recorded
+            </Badge>
+            <div className="text-xs text-gray-500 mt-2">
+              No changes were made to Man, Machine, Material, or Method during this production hour.
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+
+
+
       {/* Status Information */}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse border border-gray-300 text-sm">
@@ -431,6 +673,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
         </table>
       </div>
 
+
       {/* Rejection Reason */}
       {entry.status === 'REJECTED' && entry.rejectionReason && (
         <div className="space-y-2">
@@ -447,79 +690,99 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
         </div>
       )}
 
-            <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-300 text-sm">
-          <thead>
-            <tr>
-              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Total Production</th>
-              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Efficiency</th>
-              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Reject Rate</th>
-              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Target Achievement</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="border border-gray-300 px-6 py-6 text-center">
-                <div className="text-2xl font-bold text-gray-900 mb-1">{totalProduction.toLocaleString()}</div>
-                <div className="text-sm text-gray-600">Units</div>
-              </td>
-              <td className="border border-gray-300 px-6 py-6 text-center">
-                <div className={`text-2xl font-bold mb-1 flex items-center justify-center ${getPerformanceIndicator(efficiency, 'efficiency').color}`}>
-                  {(() => {
-                    const { Icon } = getPerformanceIndicator(efficiency, 'efficiency')
-                    return <Icon className="w-5 h-5 mr-2" />
-                  })()}
-                  {efficiency}%
-                </div>
-                <div className="text-xs text-gray-600">Good / Total</div>
-              </td>
-              <td className="border border-gray-300 px-6 py-6 text-center">
-                <div className={`text-2xl font-bold mb-1 flex items-center justify-center ${getPerformanceIndicator(rejectRate, 'rejectRate').color}`}>
-                  {(() => {
-                    const { Icon } = getPerformanceIndicator(rejectRate, 'rejectRate')
-                    return <Icon className="w-5 h-5 mr-2" />
-                  })()}
-                  {rejectRate}%
-                </div>
-                <div className="text-xs text-gray-600">Rejects / Total</div>
-              </td>
-              <td className="border border-gray-300 px-6 py-6 text-center">
-                <div className={`text-2xl font-bold mb-1 flex items-center justify-center ${getPerformanceIndicator(targetAchievement, 'targetAchievement').color}`}>
-                  {(() => {
-                    const { Icon } = getPerformanceIndicator(targetAchievement, 'targetAchievement')
-                    return <Icon className="w-5 h-5 mr-2" />
-                  })()}
-                  {targetAchievement}%
-                </div>
-                <div className="text-xs text-gray-600">Actual / Target</div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      {/* Production Summary with OEE */}
+      <div className="space-y-2">
+        <Label className="text-sm font-semibold">Production Summary & OEE Analysis</Label>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse border border-gray-300 text-sm">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">Total Production</th>
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">Efficiency</th>
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">Target Achievement</th>
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">Availability</th>
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">Performance</th>
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">Quality</th>
+                <th className="border border-gray-300 px-6 py-3 text-center font-bold">OEE</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-gray-300 px-6 py-6 text-center">
+                  <div className="text-2xl font-bold text-gray-900 mb-1">{totalProduction.toLocaleString()}</div>
+                  <div className="text-sm text-gray-600">Units</div>
+                </td>
+                <td className="border border-gray-300 px-6 py-6 text-center">
+                  <div className="text-2xl font-bold mb-1">{efficiency}%</div>
+                  <div className="text-xs text-gray-600">Good / Total</div>
+                </td>
+                <td className="border border-gray-300 px-6 py-6 text-center">
+                  <div className="text-2xl font-bold mb-1">{targetAchievement}%</div>
+                  <div className="text-xs text-gray-600">Actual / Target</div>
+                </td>
+                {(() => {
+                  const oeeData = calculateOEE(
+                    entry.availableTime,
+                    entry.lossTime,
+                    entry.lineCapacity,
+                    entry.goodParts,
+                    entry.rejects
+                  )
+                  const category = getOEECategory(oeeData.oee)
+
+                  return (
+                    <>
+                      <td className="border border-gray-300 px-6 py-6 text-center">
+                        <div className="text-2xl font-bold mb-1">{oeeData.availability}%</div>
+                        <div className="text-xs text-gray-600">Operating / Planned</div>
+                      </td>
+                      <td className="border border-gray-300 px-6 py-6 text-center">
+                        <div className="text-2xl font-bold mb-1">{oeeData.performance}%</div>
+                        <div className="text-xs text-gray-600">Actual / Ideal</div>
+                      </td>
+                      <td className="border border-gray-300 px-6 py-6 text-center">
+                        <div className="text-2xl font-bold mb-1">{oeeData.quality}%</div>
+                        <div className="text-xs text-gray-600">Good / Total</div>
+                      </td>
+                      <td className="border border-gray-300 px-6 py-6 text-center">
+                        <div className={`text-3xl font-bold mb-1 ${category.color}`}>{oeeData.oee}%</div>
+                        <div className="text-xs text-gray-600">{category.category}</div>
+                      </td>
+                    </>
+                  )
+                })()}
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+
+
+
+
 
 
       {/* Approval Actions */}
       {showActions && entry.status === 'PENDING' && onApprove && userRole === 'SUPERVISOR' && (
-        <Card className="shadow-lg border-2 border-gray-300">
+        <Card className="shadow-lg border-2 border-gray-300 rounded-none">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center text-xl">
               <User className="mr-3 h-6 w-6" />
               Supervisor Actions
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-6">
-            <div className="border border-gray-200 rounded p-6">
+          <CardContent >
+            <div className="border border-gray-200 rounded p-2">
               <div className="text-center space-y-4">
                 <div className="text-lg font-medium text-gray-900 mb-4">
                   Review this production entry and take appropriate action
                 </div>
                 <div className="flex justify-center space-x-4">
                   <Button
-                    
+
                     onClick={handleApprove}
                     className="px-8 py-3 text-lg font-semibold min-w-[150px] bg-green-600 hover:bg-green-700"
-                    
+
                   >
                     <CheckCircle className="mr-2 h-5 w-5" />
                     Approve Entry
@@ -542,7 +805,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
         </Card>
       )}
 
-      
+
 
       {/* Rejection Dialog */}
       <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
@@ -575,8 +838,8 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
               <Button variant="outline" onClick={handleRejectCancel} disabled={submitting}>
                 Cancel
               </Button>
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={handleRejectConfirm}
                 disabled={!rejectionReason.trim() || submitting}
               >

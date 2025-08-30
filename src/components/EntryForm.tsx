@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Entry, FormData, FormErrors, Parameters } from '@/types'
+import { Entry, FormData, FormErrors, Parameters, ShiftInfo } from '@/types'
+import { getCurrentShift, getCurrentHour, SHIFT_SCHEDULES, getNextHour } from '@/lib/shifts'
 import {
   Factory,
   CheckCircle,
@@ -19,8 +20,11 @@ import {
   Minus,
   Save,
   RotateCcw,
-  X
+  X,
+  Clock,
+  AlertCircle
 } from 'lucide-react'
+import { calculateOEE, getOEECategory } from '@/lib/oee'
 
 interface EntryFormProps {
   onSuccess?: () => void
@@ -35,11 +39,13 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [shiftInfo, setShiftInfo] = useState<ShiftInfo | null>(null)
 
   const [formData, setFormData] = useState<FormData>({
     date: new Date().toISOString().split('T')[0],
     line: '',
-    shift: '',
+    shift: getCurrentShift(),
+    hour: '',
     teamLeader: '',
     shiftInCharge: '',
     model: '',
@@ -59,15 +65,102 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     rejectionPhenomena: '',
     rejectionCause: '',
     rejectionCorrectiveAction: '',
-    rejectionCount: ''
+    rejectionCount: '',
+    // 4M Change tracking
+    has4MChange: false,
+    manChange: false,
+    manReason: '',
+    manCC: '',
+    manSC: '',
+    manGeneral: '',
+    machineChange: false,
+    machineReason: '',
+    machineCC: '',
+    machineSC: '',
+    machineGeneral: '',
+    materialChange: false,
+    materialReason: '',
+    materialCC: '',
+    materialSC: '',
+    materialGeneral: '',
+    methodChange: false,
+    methodReason: '',
+    methodCC: '',
+    methodSC: '',
+    methodGeneral: '',
   })
 
   useEffect(() => {
     fetchParameters()
+    updateShiftInfo()
+
+    // Update shift info every minute
+    const interval = setInterval(updateShiftInfo, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
     if (isEditing && editingEntry) {
       populateFormForEdit()
+    } else {
+      // Set current shift and hour for new entries
+      updateShiftInfo()
     }
   }, [isEditing, editingEntry])
+
+  const updateShiftInfo = () => {
+    const currentShift = getCurrentShift()
+    const currentHour = getCurrentHour(currentShift)
+    const nextHour = getNextHour(currentShift, currentHour)
+    const shiftConfig = SHIFT_SCHEDULES[currentShift]
+
+    const timeRemaining = calculateTimeRemaining(currentHour)
+
+    const info: ShiftInfo = {
+      currentShift,
+      currentHour,
+      nextHour,
+      shiftName: shiftConfig.name,
+      timeRemaining
+    }
+
+    setShiftInfo(info)
+
+    // Auto-set shift and hour for new entries
+    if (!isEditing) {
+      setFormData(prev => ({
+        ...prev,
+        shift: currentShift,
+        hour: currentHour
+      }))
+    }
+  }
+
+  const calculateTimeRemaining = (hourSlot: string): string => {
+    if (!hourSlot) return 'Unknown'
+
+    const now = new Date()
+    const [, endTime] = hourSlot.split('-')
+    const [endHour, endMin] = endTime.split(':').map(Number)
+
+    const endDate = new Date(now)
+    endDate.setHours(endHour, endMin, 0, 0)
+
+    // Handle overnight shift
+    if (endHour < now.getHours()) {
+      endDate.setDate(endDate.getDate() + 1)
+    }
+
+    const diffMs = endDate.getTime() - now.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins <= 0) return 'Time Up'
+
+    const hours = Math.floor(diffMins / 60)
+    const minutes = diffMins % 60
+
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
+  }
 
   const populateFormForEdit = () => {
     if (editingEntry) {
@@ -75,6 +168,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         date: editingEntry.date.split('T')[0],
         line: editingEntry.line,
         shift: editingEntry.shift,
+        hour: editingEntry.hour,
         teamLeader: editingEntry.teamLeader,
         shiftInCharge: editingEntry.shiftInCharge,
         model: editingEntry.model,
@@ -94,7 +188,30 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         rejectionPhenomena: editingEntry.rejectionPhenomena || '',
         rejectionCause: editingEntry.rejectionCause || '',
         rejectionCorrectiveAction: editingEntry.rejectionCorrectiveAction || '',
-        rejectionCount: editingEntry.rejectionCount?.toString() || ''
+        rejectionCount: editingEntry.rejectionCount?.toString() || '',
+
+        // 4M Change tracking
+        has4MChange: editingEntry.has4MChange || false,
+        manChange: editingEntry.manChange || false,
+        manReason: editingEntry.manReason || '',
+        manCC: editingEntry.manCC || '',
+        manSC: editingEntry.manSC || '',
+        manGeneral: editingEntry.manGeneral || '',
+        machineChange: editingEntry.machineChange || false,
+        machineReason: editingEntry.machineReason || '',
+        machineCC: editingEntry.machineCC || '',
+        machineSC: editingEntry.machineSC || '',
+        machineGeneral: editingEntry.machineGeneral || '',
+        materialChange: editingEntry.materialChange || false,
+        materialReason: editingEntry.materialReason || '',
+        materialCC: editingEntry.materialCC || '',
+        materialSC: editingEntry.materialSC || '',
+        materialGeneral: editingEntry.materialGeneral || '',
+        methodChange: editingEntry.methodChange || false,
+        methodReason: editingEntry.methodReason || '',
+        methodCC: editingEntry.methodCC || '',
+        methodSC: editingEntry.methodSC || '',
+        methodGeneral: editingEntry.methodGeneral || '',
       })
     }
   }
@@ -147,6 +264,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     if (!formData.date) newErrors.date = 'Required'
     if (!formData.line) newErrors.line = 'Required'
     if (!formData.shift) newErrors.shift = 'Required'
+    if (!formData.hour) newErrors.hour = 'Required'
     if (!formData.teamLeader) newErrors.teamLeader = 'Required'
     if (!formData.shiftInCharge) newErrors.shiftInCharge = 'Required'
     if (!formData.model) newErrors.model = 'Required'
@@ -261,10 +379,14 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
   }
 
   const resetForm = () => {
+    const currentShift = getCurrentShift()
+    const currentHour = getCurrentHour(currentShift)
+
     setFormData({
       date: new Date().toISOString().split('T')[0],
       line: '',
-      shift: '',
+      shift: currentShift,
+      hour: currentHour,
       teamLeader: '',
       shiftInCharge: '',
       model: '',
@@ -284,7 +406,29 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
       rejectionPhenomena: '',
       rejectionCause: '',
       rejectionCorrectiveAction: '',
-      rejectionCount: ''
+      rejectionCount: '',
+      // 4M Change tracking
+      has4MChange: false,
+      manChange: false,
+      manReason: '',
+      manCC: '',
+      manSC: '',
+      manGeneral: '',
+      machineChange: false,
+      machineReason: '',
+      machineCC: '',
+      machineSC: '',
+      machineGeneral: '',
+      materialChange: false,
+      materialReason: '',
+      materialCC: '',
+      materialSC: '',
+      materialGeneral: '',
+      methodChange: false,
+      methodReason: '',
+      methodCC: '',
+      methodSC: '',
+      methodGeneral: '',
     })
     setErrors({})
     setSubmitStatus('idle')
@@ -303,13 +447,34 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               </div>
               <div>
                 <CardTitle className="text-2xl font-bold">
-                  {isEditing ? 'Edit Production Entry' : 'Production Data Entry'}
+                  {isEditing ? 'Edit Production Entry' : 'Hourly Production Entry'}
                 </CardTitle>
                 <CardDescription>
-                  {isEditing ? 'Modify production data details' : 'Enter production data for supervisor approval'}
+                  {isEditing ? 'Modify hourly production data' : 'Enter hourly production data for supervisor approval'}
                 </CardDescription>
               </div>
             </div>
+
+            {/* Shift Information Display */}
+            {shiftInfo && (
+              <div className="flex items-center space-x-4">
+                <div className="text-right">
+                  <div className="flex items-center space-x-2">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    <Badge variant="outline" className="text-sm">
+                      {shiftInfo.shiftName}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Current Hour: <span className="font-medium">{shiftInfo.currentHour}</span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Time Remaining: <span className="font-medium">{shiftInfo.timeRemaining}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {showCloseButton && onClose && (
               <Button variant="outline" size="sm" onClick={onClose}>
                 <X className="h-4 w-4 mr-2" />
@@ -320,12 +485,33 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         </CardHeader>
 
         <CardContent className="p-6">
+          {/* Current Shift Alert */}
+          {shiftInfo && !isEditing && (
+            <Alert className="mb-6 border-blue-300 bg-blue-50">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                <div className="font-medium">Active: {shiftInfo.shiftName}</div>
+                <div className="text-sm">
+                  Creating entry for <strong>{shiftInfo.currentHour}</strong>
+                  {shiftInfo.timeRemaining !== 'Time Up' && (
+                    <span> • {shiftInfo.timeRemaining} remaining</span>
+                  )}
+                </div>
+                {shiftInfo.timeRemaining === 'Time Up' && (
+                  <div className="text-sm text-orange-700 mt-1">
+                    Hour has ended. Next hour: {shiftInfo.nextHour}
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Status Messages */}
           {submitStatus === 'success' && (
             <Alert className="mb-6 border-green-300">
               <CheckCircle className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-800">
-                {isEditing ? 'Entry updated successfully!' : 'Entry submitted successfully! Pending supervisor approval.'}
+                {isEditing ? 'Entry updated successfully!' : 'Hourly entry submitted successfully! Pending supervisor approval.'}
               </AlertDescription>
             </Alert>
           )}
@@ -348,10 +534,10 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Date *</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Line *</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Shift *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Hour *</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Model *</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Team Leader *</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Shift InCharge *</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Production Type</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -380,17 +566,47 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                       {errors.line && <div className="text-xs text-red-600 mt-1">{errors.line}</div>}
                     </td>
                     <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.shift} onValueChange={(value) => updateField('shift', value)}>
+                      <Select
+                        value={formData.shift}
+                        onValueChange={(value) => {
+                          updateField('shift', value)
+                          // Auto-update hour when shift changes
+                          const newCurrentHour = getCurrentHour(value)
+                          updateField('hour', newCurrentHour)
+                        }}
+                        disabled={!isEditing} // Lock for new entries
+                      >
                         <SelectTrigger className={`h-8 text-xs ${hasError('shift') ? 'border-red-500' : 'border-gray-300'}`}>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent>
-                          {parameters.SHIFT?.map((shift) => (
-                            <SelectItem key={shift} value={shift}>{shift}</SelectItem>
+                          {Object.keys(SHIFT_SCHEDULES).map((shift) => (
+                            <SelectItem key={shift} value={shift}>
+                              {SHIFT_SCHEDULES[shift].name}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       {errors.shift && <div className="text-xs text-red-600 mt-1">{errors.shift}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select
+                        value={formData.hour}
+                        onValueChange={(value) => updateField('hour', value)}
+                      // disabled={!isEditing && !!shiftInfo} // Lock for new entries to current hour
+                      >
+                        <SelectTrigger className={`h-8 text-xs ${hasError('hour') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SHIFT_SCHEDULES[formData.shift]?.hours.map((hour) => (
+                            <SelectItem key={hour} value={hour}>
+                              {hour}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.hour && <div className="text-xs text-red-600 mt-1">{errors.hour}</div>}
                     </td>
                     <td className="border border-gray-300 px-3 py-2">
                       <Select value={formData.model} onValueChange={(value) => updateField('model', value)}>
@@ -431,15 +647,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                       </Select>
                       {errors.shiftInCharge && <div className="text-xs text-red-600 mt-1">{errors.shiftInCharge}</div>}
                     </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={formData.productionType === 'Sets'}
-                          onCheckedChange={(checked) => updateField('productionType', checked ? 'Sets' : 'Single')}
-                        />
-                        <span className="text-xs font-medium">{formData.productionType}</span>
-                      </div>
-                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -456,6 +663,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Good Parts</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejects</th>
                     <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Loss Time</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Prod. Type</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -528,7 +736,16 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                         className={`h-8 text-xs ${hasError('lossTime') ? 'border-red-500' : 'border-gray-300'}`}
                         placeholder="Minutes"
                       />
-                      {errors.lossTime && <div className="text-xs text-red-600 mt-1">{errors.lossTime}</div>}
+                      {errors.lossTime && <div className="textxs text-red-600 mt-1">{errors.lossTime}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          checked={formData.productionType === 'Sets'}
+                          onCheckedChange={(checked) => updateField('productionType', checked ? 'Sets' : 'Single')}
+                        />
+                        <span className="text-xs font-medium">{formData.productionType}</span>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -680,6 +897,306 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               </div>
             )}
 
+            {/* 4M Change Management */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-start space-x-2">
+                <Label className="text-sm font-bold">4M Change Management</Label>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={formData.has4MChange}
+                    onCheckedChange={(checked) => {
+                      updateField('has4MChange', checked)
+                      // Reset all 4M fields when toggled off
+                      if (!checked) {
+                        updateField('manChange', false)
+                        updateField('machineChange', false)
+                        updateField('materialChange', false)
+                        updateField('methodChange', false)
+                        updateField('manReason', '')
+                        updateField('manCC', '')
+                        updateField('manSC', '')
+                        updateField('manGeneral', '')
+                        updateField('machineReason', '')
+                        updateField('machineCC', '')
+                        updateField('machineSC', '')
+                        updateField('machineGeneral', '')
+                        updateField('materialReason', '')
+                        updateField('materialCC', '')
+                        updateField('materialSC', '')
+                        updateField('materialGeneral', '')
+                        updateField('methodReason', '')
+                        updateField('methodCC', '')
+                        updateField('methodSC', '')
+                        updateField('methodGeneral', '')
+                      }
+                    }}
+                  />
+                  <Badge variant={formData.has4MChange ? 'default' : 'secondary'} className="text-xs">
+                    {formData.has4MChange ? 'Changes Made' : 'No Changes'}
+                  </Badge>
+                </div>
+              </div>
+
+              {formData.has4MChange && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-sm">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-40">Category</th>
+                        <th className="border border-gray-300 px-3 py-2 text-center font-semibold w-20">Change</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-1/4">Description/Reason</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-1/4">Critical Characteristics (CC)</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-1/4">Significant Characteristics (SC)</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-1/4">General</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* MAN Row */}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-3 py-3 font-semibold bg-gray-50">
+                          MAN
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <Switch
+                              checked={formData.manChange}
+                              onCheckedChange={(checked) => {
+                                updateField('manChange', checked)
+                                if (!checked) {
+                                  updateField('manReason', '')
+                                  updateField('manCC', '')
+                                  updateField('manSC', '')
+                                  updateField('manGeneral', '')
+                                }
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.manReason}
+                            onChange={(e) => updateField('manReason', e.target.value)}
+                            placeholder={formData.manChange ? "Describe the change" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.manChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.manCC}
+                            onChange={(e) => updateField('manCC', e.target.value)}
+                            placeholder={formData.manChange ? "CC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.manChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.manSC}
+                            onChange={(e) => updateField('manSC', e.target.value)}
+                            placeholder={formData.manChange ? "SC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.manChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.manGeneral}
+                            onChange={(e) => updateField('manGeneral', e.target.value)}
+                            placeholder={formData.manChange ? "General details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.manChange}
+                          />
+                        </td>
+                      </tr>
+
+                      {/* MACHINE Row */}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-3 py-3 font-semibold bg-gray-50">
+                          MACHINE
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <Switch
+                              checked={formData.machineChange}
+                              onCheckedChange={(checked) => {
+                                updateField('machineChange', checked)
+                                if (!checked) {
+                                  updateField('machineReason', '')
+                                  updateField('machineCC', '')
+                                  updateField('machineSC', '')
+                                  updateField('machineGeneral', '')
+                                }
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.machineReason}
+                            onChange={(e) => updateField('machineReason', e.target.value)}
+                            placeholder={formData.machineChange ? "Describe the change" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.machineChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.machineCC}
+                            onChange={(e) => updateField('machineCC', e.target.value)}
+                            placeholder={formData.machineChange ? "CC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.machineChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.machineSC}
+                            onChange={(e) => updateField('machineSC', e.target.value)}
+                            placeholder={formData.machineSC ? "SC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.machineChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.machineGeneral}
+                            onChange={(e) => updateField('machineGeneral', e.target.value)}
+                            placeholder={formData.machineChange ? "General details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.machineChange}
+                          />
+                        </td>
+                      </tr>
+
+                      {/* MATERIAL Row */}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-3 py-3 font-semibold bg-gray-50">
+                          MATERIAL
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <Switch
+                              checked={formData.materialChange}
+                              onCheckedChange={(checked) => {
+                                updateField('materialChange', checked)
+                                if (!checked) {
+                                  updateField('materialReason', '')
+                                  updateField('materialCC', '')
+                                  updateField('materialSC', '')
+                                  updateField('materialGeneral', '')
+                                }
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.materialReason}
+                            onChange={(e) => updateField('materialReason', e.target.value)}
+                            placeholder={formData.materialChange ? "Describe the change" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.materialChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.materialCC}
+                            onChange={(e) => updateField('materialCC', e.target.value)}
+                            placeholder={formData.materialChange ? "CC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.materialChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.materialSC}
+                            onChange={(e) => updateField('materialSC', e.target.value)}
+                            placeholder={formData.materialChange ? "SC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.materialChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.materialGeneral}
+                            onChange={(e) => updateField('materialGeneral', e.target.value)}
+                            placeholder={formData.materialChange ? "General details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.materialChange}
+                          />
+                        </td>
+                      </tr>
+
+                      {/* METHOD/TOOL/FIXTURE/DIE Row */}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-3 py-3 font-semibold bg-gray-50">
+                          METHOD/TOOL/FIXTURE/DIE
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <Switch
+                              checked={formData.methodChange}
+                              onCheckedChange={(checked) => {
+                                updateField('methodChange', checked)
+                                if (!checked) {
+                                  updateField('methodReason', '')
+                                  updateField('methodCC', '')
+                                  updateField('methodSC', '')
+                                  updateField('methodGeneral', '')
+                                }
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.methodReason}
+                            onChange={(e) => updateField('methodReason', e.target.value)}
+                            placeholder={formData.methodChange ? "Describe the change" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.methodChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.methodCC}
+                            onChange={(e) => updateField('methodCC', e.target.value)}
+                            placeholder={formData.methodChange ? "CC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.methodChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.methodSC}
+                            onChange={(e) => updateField('methodSC', e.target.value)}
+                            placeholder={formData.methodChange ? "SC details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.methodChange}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-3">
+                          <Input
+                            value={formData.methodGeneral}
+                            onChange={(e) => updateField('methodGeneral', e.target.value)}
+                            placeholder={formData.methodChange ? "General details" : "No change"}
+                            className="h-8 text-xs"
+                            disabled={!formData.methodChange}
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+
+
+
+
+
             {/* Operators Section - Vertical List */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -753,17 +1270,21 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
             </div>
 
             {/* Production Summary */}
+            {/* Production Summary with OEE */}
             {(parseNumber(formData.goodParts) > 0 || parseNumber(formData.rejects) > 0) && (
               <div className="mt-6">
-                <Label className="text-sm font-semibold mb-2 block">Production Summary</Label>
+                <Label className="text-sm font-semibold mb-2 block">Production Summary & OEE Analysis</Label>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-gray-300 text-sm">
                     <thead>
-                      <tr>
+                      <tr className="bg-gray-100">
                         <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total Production</th>
                         <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Efficiency %</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Reject Rate %</th>
                         <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Target Achievement %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Availability %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Performance %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Quality %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">OEE %</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -782,20 +1303,43 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                         </td>
                         <td className="border border-gray-300 px-4 py-3 text-center">
                           <div className="text-lg font-bold">
-                            {parseNumber(formData.goodParts) + parseNumber(formData.rejects) > 0
-                              ? Math.round((parseNumber(formData.rejects) / (parseNumber(formData.goodParts) + parseNumber(formData.rejects))) * 100)
-                              : 0}%
-                          </div>
-                          <div className="text-xs text-gray-600">Rejects / Total</div>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3 text-center">
-                          <div className="text-lg font-bold">
                             {parseNumber(formData.ppcTarget) > 0
                               ? Math.round(((parseNumber(formData.goodParts) + parseNumber(formData.rejects)) / parseNumber(formData.ppcTarget)) * 100)
                               : 0}%
                           </div>
                           <div className="text-xs text-gray-600">Actual / Target</div>
                         </td>
+                        {(() => {
+                          const oeeData = calculateOEE(
+                            formData.availableTime || "0",
+                            parseNumber(formData.lossTime),
+                            formData.lineCapacity || "0",
+                            parseNumber(formData.goodParts),
+                            parseNumber(formData.rejects)
+                          )
+                          const category = getOEECategory(oeeData.oee)
+
+                          return (
+                            <>
+                              <td className="border border-gray-300 px-4 py-3 text-center">
+                                <div className="text-lg font-bold">{oeeData.availability}%</div>
+                                <div className="text-xs text-gray-600">Operating / Planned</div>
+                              </td>
+                              <td className="border border-gray-300 px-4 py-3 text-center">
+                                <div className="text-lg font-bold">{oeeData.performance}%</div>
+                                <div className="text-xs text-gray-600">Actual / Ideal Rate</div>
+                              </td>
+                              <td className="border border-gray-300 px-4 py-3 text-center">
+                                <div className="text-lg font-bold">{oeeData.quality}%</div>
+                                <div className="text-xs text-gray-600">Good / Total</div>
+                              </td>
+                              <td className="border border-gray-300 px-4 py-3 text-center">
+                                <div className={`text-xl font-bold ${category.color}`}>{oeeData.oee}%</div>
+                                <div className="text-xs text-gray-600">{category.category}</div>
+                              </td>
+                            </>
+                          )
+                        })()}
                       </tr>
                     </tbody>
                   </table>

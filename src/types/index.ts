@@ -10,6 +10,7 @@ export interface Entry {
   date: string
   line: string
   shift: string
+  hour: string  // NEW FIELD
   teamLeader: string
   shiftInCharge: string
   model: string
@@ -23,8 +24,8 @@ export interface Entry {
   description: string
   lossTime: number
   responsibility: string
-  productionType?: string // Changed from strict union to string
-  defectType?: string     // Changed from strict union to string
+  productionType?: 'Single' | 'Sets'
+  defectType?: 'Repeat' | 'New'
   newDefectDescription?: string
   rejectionPhenomena: string | null
   rejectionCause: string | null
@@ -36,32 +37,86 @@ export interface Entry {
   approvedBy?: { name: string; email: string }
   createdAt: string
   updatedAt: string
+
+
+  // 4M Change tracking
+  has4MChange?: boolean
+  manChange?: boolean
+  manReason?: string
+  manCC?: string
+  manSC?: string
+  manGeneral?: string
+  machineChange?: boolean
+  machineReason?: string
+  machineCC?: string
+  machineSC?: string
+  machineGeneral?: string
+  materialChange?: boolean
+  materialReason?: string
+  materialCC?: string
+  materialSC?: string
+  materialGeneral?: string
+  methodChange?: boolean
+  methodReason?: string
+  methodCC?: string
+  methodSC?: string
+  methodGeneral?: string
+
+
+
+
 }
 
 export interface FormData {
   date: string
   line: string
   shift: string
+  hour: string  // NEW FIELD
   teamLeader: string
   shiftInCharge: string
   model: string
   operatorNames: string[]
   availableTime: string
   lineCapacity: string
-  ppcTarget: string  // Changed from number to string
-  goodParts: string  // Changed from number to string
-  rejects: string    // Changed from number to string
+  ppcTarget: string
+  goodParts: string
+  rejects: string
   problemHead: string
   description: string
-  lossTime: string   // Changed from number to string
+  lossTime: string
   responsibility: string
-  productionType: string |'Single' | 'Sets'
-  defectType:string|'Repeat' | 'New'
+  productionType: 'Single' | 'Sets'
+  defectType: 'Repeat' | 'New'
   newDefectDescription: string
   rejectionPhenomena: string
   rejectionCause: string
   rejectionCorrectiveAction: string
-  rejectionCount: string  // Changed from number to string
+  rejectionCount: string
+
+  // 4M Change tracking
+  has4MChange: boolean
+  manChange: boolean
+  manReason: string
+  manCC: string
+  manSC: string
+  manGeneral: string
+  machineChange: boolean
+  machineReason: string
+  machineCC: string
+  machineSC: string
+  machineGeneral: string
+  materialChange: boolean
+  materialReason: string
+  materialCC: string
+  materialSC: string
+  materialGeneral: string
+  methodChange: boolean
+  methodReason: string
+  methodCC: string
+  methodSC: string
+  methodGeneral: string
+
+
 }
 
 export interface FormErrors {
@@ -70,4 +125,12 @@ export interface FormErrors {
 
 export interface Parameters {
   [key: string]: string[]
+}
+
+export interface ShiftInfo {
+  currentShift: string
+  currentHour: string
+  nextHour: string
+  shiftName: string
+  timeRemaining: string
 }

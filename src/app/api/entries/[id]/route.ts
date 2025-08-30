@@ -4,7 +4,7 @@ import { getUserFromToken } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.cookies.get('token')?.value
@@ -17,8 +17,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Await the params Promise
+    const { id } = await params
+
     const entry = await prisma.entry.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         submittedBy: { select: { name: true, email: true } },
         approvedBy: { select: { name: true, email: true } }
@@ -45,7 +48,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.cookies.get('token')?.value
@@ -58,8 +61,11 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Await the params Promise
+    const { id } = await params
+
     const entry = await prisma.entry.findUnique({
-      where: { id: params.id }
+      where: { id }
     })
 
     if (!entry) {
@@ -79,7 +85,7 @@ export async function PUT(
     const data = await request.json()
     
     const updatedEntry = await prisma.entry.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         date: new Date(data.date),
         line: data.line,

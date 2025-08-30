@@ -1,32 +1,37 @@
-import { SHIFT_HOURS } from '@/types'
-
-export interface ShiftInfo {
+export interface ShiftConfig {
   name: string
+  hours: string[]
   startTime: string
   endTime: string
-  breakTime?: string
-  hours: string[]
 }
 
-export const SHIFTS: Record<string, ShiftInfo> = {
+export const SHIFT_SCHEDULES: Record<string, ShiftConfig> = {
   MORNING: {
     name: 'Morning Shift',
     startTime: '07:00',
     endTime: '15:30',
-    breakTime: '11:00-11:30',
-    hours: SHIFT_HOURS.MORNING
+    hours: [
+      "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:00-11:00",
+      "11:30-12:30", "12:30-13:30", "13:30-14:30", "14:30-15:30"
+    ]
   },
   AFTERNOON: {
-    name: 'Afternoon Shift',
+    name: 'Afternoon Shift', 
     startTime: '15:30',
     endTime: '23:30',
-    hours: SHIFT_HOURS.AFTERNOON
+    hours: [
+      "15:30-16:30", "16:30-17:30", "17:30-18:30", "18:30-19:30",
+      "19:30-20:30", "20:30-21:30", "21:30-22:30", "22:30-23:30"
+    ]
   },
   EVENING: {
     name: 'Evening Shift',
-    startTime: '23:30',
+    startTime: '23:30', 
     endTime: '07:00',
-    hours: SHIFT_HOURS.EVENING
+    hours: [
+      "23:30-00:30", "00:30-01:30", "01:30-02:30", "02:30-03:30",
+      "03:30-04:30", "04:30-05:30", "05:30-06:30", "06:30-07:00"
+    ]
   }
 }
 
@@ -34,13 +39,13 @@ export const getCurrentShift = (): string => {
   const now = new Date()
   const hour = now.getHours()
   const minute = now.getMinutes()
-  const currentTime = hour * 60 + minute // Convert to minutes
+  const currentTime = hour * 60 + minute
 
   // Morning: 7:00 - 15:30 (420 - 930)
   if (currentTime >= 420 && currentTime < 930) {
     return 'MORNING'
   }
-  // Afternoon: 15:30 - 23:30 (930 - 1410)
+  // Afternoon: 15:30 - 23:30 (930 - 1410) 
   else if (currentTime >= 930 && currentTime < 1410) {
     return 'AFTERNOON'
   }
@@ -53,44 +58,52 @@ export const getCurrentShift = (): string => {
 export const getCurrentHour = (shift: string): string => {
   const now = new Date()
   const hour = now.getHours()
-  const shiftHours = SHIFT_HOURS[shift as keyof typeof SHIFT_HOURS]
-  
-  if (!shiftHours) return ''
-  
-  // Find the current hour slot based on actual time
-  for (const hourSlot of shiftHours) {
-    const [startHour] = hourSlot.split('-')[0].split(':').map(Number)
+  const minute = now.getMinutes()
+  const currentTime = hour * 60 + minute
+
+  const shiftConfig = SHIFT_SCHEDULES[shift]
+  if (!shiftConfig) return ''
+
+  // Find current hour slot
+  for (const hourSlot of shiftConfig.hours) {
+    const [startHour, startMin] = hourSlot.split('-')[0].split(':').map(Number)
+    const [endHour, endMin] = hourSlot.split('-')[1].split(':').map(Number)
     
+    let startTime = startHour * 60 + startMin
+    let endTime = endHour * 60 + endMin
+    
+    // Handle overnight shifts
     if (shift === 'EVENING') {
-      // Handle evening shift that crosses midnight
-      if (hour >= 23 || hour < 7) {
-        if (hour === 23 && hourSlot.startsWith('23:30')) return hourSlot
-        if (hour >= 0 && hour < 7) {
-          const slotHour = hourSlot.split('-')[0].split(':')[0]
-          if (parseInt(slotHour) === hour) return hourSlot
-        }
+      if (startTime >= 1410) startTime = startTime // Same day
+      else startTime = startTime + 1440 // Next day
+      
+      if (endTime <= 420) endTime = endTime + 1440 // Next day
+      
+      let adjustedCurrentTime = currentTime
+      if (currentTime >= 1410) adjustedCurrentTime = currentTime // Same day  
+      else adjustedCurrentTime = currentTime + 1440 // Next day
+      
+      if (adjustedCurrentTime >= startTime && adjustedCurrentTime < endTime) {
+        return hourSlot
       }
     } else {
-      if (hour === startHour) return hourSlot
+      if (currentTime >= startTime && currentTime < endTime) {
+        return hourSlot  
+      }
     }
   }
   
-  return shiftHours[0] // Default to first hour if none matches
+  return shiftConfig.hours[0] // Default to first hour
 }
 
-export const getMissingHourlyEntries = async (
-  date: string, 
-  shift: string, 
-  line: string,
-  existingEntries: string[]
-): Promise<string[]> => {
-  const shiftHours = SHIFT_HOURS[shift as keyof typeof SHIFT_HOURS]
-  if (!shiftHours) return []
+export const getNextHour = (shift: string, currentHour: string): string => {
+  const shiftConfig = SHIFT_SCHEDULES[shift]
+  if (!shiftConfig) return ''
   
-  return shiftHours.filter(hour => !existingEntries.includes(hour))
-}
-
-export const isValidHourForShift = (hour: string, shift: string): boolean => {
-  const shiftHours = SHIFT_HOURS[shift as keyof typeof SHIFT_HOURS]
-  return shiftHours ? shiftHours.includes(hour) : false
+  const currentIndex = shiftConfig.hours.indexOf(currentHour)
+  if (currentIndex === -1 || currentIndex === shiftConfig.hours.length - 1) {
+    return shiftConfig.hours[0] // Loop back to first hour
+  }
+  
+  return shiftConfig.hours[currentIndex + 1]
 }

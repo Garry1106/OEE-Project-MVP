@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -22,7 +24,6 @@ import {
   Clock, 
   XCircle, 
   FileText,
-  Users,
   Factory,
   ArrowLeft,
   List,
@@ -30,17 +31,38 @@ import {
   Calendar,
   Edit,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Search
 } from 'lucide-react'
 
 interface DashboardProps {
   user: User
 }
 
+interface Filters {
+  status: string
+  shift: string
+  line: string
+  teamLeader: string
+  dateFrom: string
+  dateTo: string
+  searchTerm: string
+}
+
+interface Pagination {
+  currentPage: number
+  totalPages: number
+  totalItems: number
+  itemsPerPage: number
+}
+
 export default function Dashboard({ user }: DashboardProps) {
   const [entries, setEntries] = useState<Entry[]>([])
+  const [filteredEntries, setFilteredEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('all')
   const [activeView, setActiveView] = useState<'entries' | 'create' | 'details'>('entries')
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null)
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
@@ -49,12 +71,36 @@ export default function Dashboard({ user }: DashboardProps) {
   const [rejectionReason, setRejectionReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  
+  const [showFilters, setShowFilters] = useState(false)
+
+  // Filters state
+  const [filters, setFilters] = useState<Filters>({
+    status: 'all',
+    shift: 'all',
+    line: 'all',
+    teamLeader: 'all',
+    dateFrom: '',
+    dateTo: '',
+    searchTerm: ''
+  })
+
+  // Pagination state
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 24
+  })
+
   const router = useRouter()
 
   useEffect(() => {
     fetchEntries()
-  }, [filter])
+  }, [])
+
+  useEffect(() => {
+    applyFilters()
+  }, [entries, filters])
 
   useEffect(() => {
     if (notification) {
@@ -65,8 +111,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const fetchEntries = async () => {
     try {
-      const url = filter === 'all' ? '/api/entries' : `/api/entries?status=${filter.toUpperCase()}`
-      const response = await fetch(url)
+      const response = await fetch('/api/entries')
       if (response.ok) {
         const data = await response.json()
         setEntries(data)
@@ -81,6 +126,94 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   }
 
+  const applyFilters = () => {
+    let filtered = entries
+
+    // Status filter
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(entry => entry.status.toLowerCase() === filters.status.toLowerCase())
+    }
+
+    // Shift filter
+    if (filters.shift !== 'all') {
+      filtered = filtered.filter(entry => entry.shift === filters.shift)
+    }
+
+    // Line filter
+    if (filters.line !== 'all') {
+      filtered = filtered.filter(entry => entry.line === filters.line)
+    }
+
+    // Team leader filter
+    if (filters.teamLeader !== 'all') {
+      filtered = filtered.filter(entry => entry.teamLeader === filters.teamLeader)
+    }
+
+    // Date range filter
+    if (filters.dateFrom) {
+      filtered = filtered.filter(entry => new Date(entry.date) >= new Date(filters.dateFrom))
+    }
+    if (filters.dateTo) {
+      filtered = filtered.filter(entry => new Date(entry.date) <= new Date(filters.dateTo))
+    }
+
+    // Search filter
+    if (filters.searchTerm) {
+      const searchLower = filters.searchTerm.toLowerCase()
+      filtered = filtered.filter(entry => 
+        entry.model.toLowerCase().includes(searchLower) ||
+        entry.teamLeader.toLowerCase().includes(searchLower) ||
+        entry.line.toLowerCase().includes(searchLower) ||
+        entry.problemHead.toLowerCase().includes(searchLower) ||
+        entry.description.toLowerCase().includes(searchLower)
+      )
+    }
+
+    setFilteredEntries(filtered)
+    
+    // Update pagination
+    const totalPages = Math.ceil(filtered.length / pagination.itemsPerPage)
+    setPagination(prev => ({
+      ...prev,
+      totalPages,
+      totalItems: filtered.length,
+      currentPage: Math.min(prev.currentPage, totalPages || 1)
+    }))
+  }
+
+  const updateFilter = (key: keyof Filters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+    setPagination(prev => ({ ...prev, currentPage: 1 })) // Reset to first page
+  }
+
+  const clearFilters = () => {
+    setFilters({
+      status: 'all',
+      shift: 'all',
+      line: 'all',
+      teamLeader: 'all',
+      dateFrom: '',
+      dateTo: '',
+      searchTerm: ''
+    })
+  }
+
+  const getPaginatedEntries = () => {
+    const startIndex = (pagination.currentPage - 1) * pagination.itemsPerPage
+    const endIndex = startIndex + pagination.itemsPerPage
+    return filteredEntries.slice(startIndex, endIndex)
+  }
+
+  const changePage = (newPage: number) => {
+    setPagination(prev => ({ ...prev, currentPage: newPage }))
+  }
+
+  // Get unique values for filter dropdowns
+  const getUniqueValues = (field: keyof Entry) => {
+    return Array.from(new Set(entries.map(entry => entry[field] as string))).sort()
+  }
+
+  // Existing functions remain unchanged
   const handleApproval = async (entryId: string, status: 'APPROVED' | 'REJECTED', reason?: string) => {
     try {
       setSubmitting(true)
@@ -100,7 +233,6 @@ export default function Dashboard({ user }: DashboardProps) {
           message: `Entry ${status.toLowerCase()} successfully!` 
         })
         
-        // If we're viewing details of the approved/rejected entry, refresh the details
         if (selectedEntry && selectedEntry.id === entryId) {
           const updatedEntry = entries.find(e => e.id === entryId)
           if (updatedEntry) {
@@ -152,7 +284,6 @@ export default function Dashboard({ user }: DashboardProps) {
       const response = await fetch(`/api/entries/${entryId}`)
       if (response.ok) {
         const entry: Entry = await response.json()
-        // Ensure operatorNames is always an array
         const normalizedEntry: Entry = {
           ...entry,
           operatorNames: entry.operatorNames || []
@@ -170,7 +301,6 @@ export default function Dashboard({ user }: DashboardProps) {
   }
 
   const handleEditFromDetails = (entry: Entry) => {
-    // Ensure operatorNames is always an array
     const normalizedEntry: Entry = {
       ...entry,
       operatorNames: entry.operatorNames || []
@@ -242,22 +372,18 @@ export default function Dashboard({ user }: DashboardProps) {
   }
 
   const stats = {
-    total: entries.length,
-    pending: entries.filter(e => e.status === 'PENDING').length,
-    approved: entries.filter(e => e.status === 'APPROVED').length,
-    rejected: entries.filter(e => e.status === 'REJECTED').length
+    total: filteredEntries.length,
+    pending: filteredEntries.filter(e => e.status === 'PENDING').length,
+    approved: filteredEntries.filter(e => e.status === 'APPROVED').length,
+    rejected: filteredEntries.filter(e => e.status === 'REJECTED').length
   }
 
-  const filteredEntries = entries.filter(entry => {
-    if (filter === 'all') return true
-    return entry.status.toLowerCase() === filter.toLowerCase()
-  })
+  const paginatedEntries = getPaginatedEntries()
 
   // If viewing entry details
   if (activeView === 'details' && selectedEntry) {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-6">
@@ -275,22 +401,10 @@ export default function Dashboard({ user }: DashboardProps) {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
-                {user.role === 'SUPERVISOR' && (
-                  <Button 
-                    onClick={() => router.push('/dashboard/analytics')} 
-                    variant="outline"
-                    className="hidden sm:flex"
-                  >
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Analytics
-                  </Button>
-                )}
-                <Button onClick={handleLogout} variant="outline">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
-                </Button>
-              </div>
+              <Button onClick={handleLogout} variant="outline">
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </Button>
             </div>
           </div>
         </header>
@@ -374,12 +488,12 @@ export default function Dashboard({ user }: DashboardProps) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Entries</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">Filtered Total</CardTitle>
               <FileText className="h-4 w-4 text-gray-400" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.total}</div>
-              <p className="text-xs text-gray-500 mt-1">All production records</p>
+              <p className="text-xs text-gray-500 mt-1">Matching filters</p>
             </CardContent>
           </Card>
 
@@ -424,7 +538,7 @@ export default function Dashboard({ user }: DashboardProps) {
               <div>
                 <CardTitle className="text-xl text-gray-900">
                   {activeView === 'entries' 
-                    ? 'Production Entries' 
+                    ? 'Hourly Production Entries' 
                     : editingEntry 
                       ? 'Edit Production Entry'
                       : 'Create New Entry'
@@ -433,11 +547,11 @@ export default function Dashboard({ user }: DashboardProps) {
                 <CardDescription>
                   {activeView === 'entries' 
                     ? user.role === 'TEAM_LEADER' 
-                      ? 'Manage your production data entries and track approval status'
-                      : 'Review and approve production entries from team leaders'
+                      ? 'Manage hourly production entries and track approval status'
+                      : 'Review and approve hourly production entries from team leaders'
                     : editingEntry
-                      ? 'Modify production data details'
-                      : 'Fill in the production data for supervisor approval'
+                      ? 'Modify hourly production data'
+                      : 'Enter hourly production data for supervisor approval'
                   }
                 </CardDescription>
               </div>
@@ -449,17 +563,26 @@ export default function Dashboard({ user }: DashboardProps) {
                     onClick={handleBackToEntries}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back 
+                    Back to Entries
                   </Button>
                 )}
                 {activeView === 'entries' && (
-                  <Button 
-                    className="bg-blue-600 hover:bg-blue-700"
-                    onClick={handleCreateNew}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Entry
-                  </Button>
+                  <>
+                    <Button 
+                      variant="outline"
+                      onClick={() => setShowFilters(!showFilters)}
+                    >
+                      <Filter className="mr-2 h-4 w-4" />
+                      {showFilters ? 'Hide Filters' : 'Show Filters'}
+                    </Button>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={handleCreateNew}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      New Entry
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -467,29 +590,146 @@ export default function Dashboard({ user }: DashboardProps) {
 
           <CardContent className="p-6">
             {activeView === 'entries' ? (
-              // Entries List View
               <>
-                {/* Filter Tabs */}
-                <Tabs value={filter} onValueChange={setFilter} className="mb-6">
-                  <TabsList className="grid grid-cols-4 w-full max-w-md">
-                    <TabsTrigger value="all" className="flex items-center">
-                      <List className="h-4 w-4 mr-1" />
-                      All
-                    </TabsTrigger>
-                    <TabsTrigger value="pending" className="flex items-center">
-                      <Clock className="h-4 w-4 mr-1" />
-                      Pending
-                    </TabsTrigger>
-                    <TabsTrigger value="approved" className="flex items-center">
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Approved
-                    </TabsTrigger>
-                    <TabsTrigger value="rejected" className="flex items-center">
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Rejected
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                {/* Advanced Filters */}
+                {showFilters && (
+                  <Card className="mb-6 border-gray-200">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center">
+                        <Filter className="mr-2 h-4 w-4" />
+                        Filter Options
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {/* Status Filter */}
+                        <div>
+                          <Label className="text-sm font-medium">Status</Label>
+                          <Select value={filters.status} onValueChange={(value) => updateFilter('status', value)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Status</SelectItem>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="approved">Approved</SelectItem>
+                              <SelectItem value="rejected">Rejected</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Shift Filter */}
+                        <div>
+                          <Label className="text-sm font-medium">Shift</Label>
+                          <Select value={filters.shift} onValueChange={(value) => updateFilter('shift', value)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Shifts</SelectItem>
+                              {getUniqueValues('shift').map((shift) => (
+                                <SelectItem key={shift} value={shift}>{shift}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Line Filter */}
+                        <div>
+                          <Label className="text-sm font-medium">Line</Label>
+                          <Select value={filters.line} onValueChange={(value) => updateFilter('line', value)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Lines</SelectItem>
+                              {getUniqueValues('line').map((line) => (
+                                <SelectItem key={line} value={line}>{line}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Team Leader Filter */}
+                        <div>
+                          <Label className="text-sm font-medium">Team Leader</Label>
+                          <Select value={filters.teamLeader} onValueChange={(value) => updateFilter('teamLeader', value)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Team Leaders</SelectItem>
+                              {getUniqueValues('teamLeader').map((leader) => (
+                                <SelectItem key={leader} value={leader}>{leader}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Date From */}
+                        <div>
+                          <Label className="text-sm font-medium">Date From</Label>
+                          <Input
+                            type="date"
+                            value={filters.dateFrom}
+                            onChange={(e) => updateFilter('dateFrom', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+
+                        {/* Date To */}
+                        <div>
+                          <Label className="text-sm font-medium">Date To</Label>
+                          <Input
+                            type="date"
+                            value={filters.dateTo}
+                            onChange={(e) => updateFilter('dateTo', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+
+                        {/* Search */}
+                        <div>
+                          <Label className="text-sm font-medium">Search</Label>
+                          <Input
+                            value={filters.searchTerm}
+                            onChange={(e) => updateFilter('searchTerm', e.target.value)}
+                            placeholder="Model, Leader, Problem..."
+                            className="h-8 text-xs"
+                          />
+                        </div>
+
+                        {/* Clear Filters */}
+                        <div className="flex items-end">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={clearFilters}
+                            className="h-8 text-xs"
+                          >
+                            Clear All
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Filter Summary */}
+                {(filters.status !== 'all' || filters.shift !== 'all' || filters.line !== 'all' || 
+                  filters.teamLeader !== 'all' || filters.dateFrom || filters.dateTo || filters.searchTerm) && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-blue-800">
+                        <Search className="h-4 w-4 inline mr-1" />
+                        Showing {stats.total} of {entries.length} entries
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-blue-600 text-xs">
+                        Clear Filters
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Entries Table */}
                 {loading ? (
@@ -502,202 +742,288 @@ export default function Dashboard({ user }: DashboardProps) {
                     <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500 text-lg">No entries found</p>
                     <p className="text-gray-400 mb-6">
-                      {user.role === 'TEAM_LEADER' 
-                        ? 'Create your first production entry to get started'
-                        : 'No entries are currently available for review'
+                      {Object.values(filters).some(f => f && f !== 'all') 
+                        ? 'Try adjusting your filters or create a new entry'
+                        : user.role === 'TEAM_LEADER' 
+                          ? 'Create your first hourly entry to get started'
+                          : 'No entries are currently available for review'
                       }
                     </p>
-                    <Button 
-                      onClick={handleCreateNew}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Create First Entry
-                    </Button>
+                    <div className="flex justify-center space-x-3">
+                      {Object.values(filters).some(f => f && f !== 'all') && (
+                        <Button variant="outline" onClick={clearFilters}>
+                          Clear Filters
+                        </Button>
+                      )}
+                      <Button 
+                        onClick={handleCreateNew}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Entry
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-gray-50">
-                          <TableHead className="font-semibold">Date</TableHead>
-                          <TableHead className="font-semibold">Line</TableHead>
-                          <TableHead className="font-semibold">Shift</TableHead>
-                          <TableHead className="font-semibold">Model</TableHead>
-                          <TableHead className="font-semibold">Production</TableHead>
-                          <TableHead className="font-semibold">Efficiency</TableHead>
-                          <TableHead className="font-semibold">Status</TableHead>
-                          <TableHead className="font-semibold">Submitted By</TableHead>
-                          <TableHead className="font-semibold">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredEntries.map((entry) => {
-                          const totalParts = entry.goodParts + entry.rejects
-                          const efficiency = totalParts > 0 ? Math.round((entry.goodParts / totalParts) * 100) : 0
-                          
-                          return (
-                            <TableRow key={entry.id} className="hover:bg-gray-50">
-                              <TableCell className="font-medium">
-                                <div className="flex items-center">
-                                  <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                                  {new Date(entry.date).toLocaleDateString()}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                                  {entry.line}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>{entry.shift}</TableCell>
-                              <TableCell>{entry.model}</TableCell>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <div className="flex items-center text-sm">
-                                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                                    <span className="text-green-600 font-medium">
-                                      {entry.goodParts.toLocaleString()}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center text-sm">
-                                    <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
-                                    <span className="text-red-600">
-                                      {entry.rejects.toLocaleString()}
-                                    </span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-12 bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className={`h-2 rounded-full ${
-                                        efficiency >= 95 ? 'bg-green-500' : 
-                                        efficiency >= 85 ? 'bg-blue-500' : 
-                                        efficiency >= 75 ? 'bg-yellow-500' : 'bg-red-500'
-                                      }`}
-                                      style={{ width: `${efficiency}%` }}
-                                    ></div>
-                                  </div>
-                                  <span className="text-sm font-medium">{efficiency}%</span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  {getStatusBadge(entry.status)}
-                                  {entry.status === 'REJECTED' && entry.rejectionReason && (
-                                    <div className="text-xs text-red-600 max-w-48 truncate">
-                                      Reason: {entry.rejectionReason}
-                                    </div>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="text-sm">
-                                  <div className="font-medium">{entry.submittedBy.name}</div>
-                                  <div className="text-gray-500">
-                                    {new Date(entry.createdAt).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleViewDetails(entry)}
-                                  >
-                                    <Eye className="mr-1 h-3 w-3" />
-                                    View
-                                  </Button>
-                                  
-                                  {/* Edit button for Team Leaders (only pending entries) */}
-                                  {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleEditEntry(entry.id)}
-                                    >
-                                      <Edit className="mr-1 h-3 w-3" />
-                                      Edit
-                                    </Button>
-                                  )}
-                                  
-                                  {/* Edit button for Supervisors (all entries) */}
-                                  {user.role === 'SUPERVISOR' && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleEditEntry(entry.id)}
-                                    >
-                                      <Edit className="mr-1 h-3 w-3" />
-                                      Edit
-                                    </Button>
-                                  )}
-                                  
-                                  {/* Approval buttons for Supervisors */}
-                                  {user.role === 'SUPERVISOR' && entry.status === 'PENDING' && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => handleApproval(entry.id, 'APPROVED')}
-                                        className="bg-green-600 hover:bg-green-700"
-                                        disabled={submitting}
-                                      >
-                                        <CheckCircle className="mr-1 h-3 w-3" />
-                                        Approve
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        onClick={() => handleRejectClick(entry.id)}
-                                        disabled={submitting}
-                                      >
-                                        <XCircle className="mr-1 h-3 w-3" />
-                                        Reject
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </>
-            ) : (
-              // Entry Form View
-              <div className="max-w-none">
-                <EntryForm 
-                  onSuccess={handleEntrySuccess}
-                  onClose={user.role === 'SUPERVISOR' ? handleBackToEntries : undefined}
-                  editingEntry={editingEntry}
-                  isEditing={!!editingEntry}
-                  showCloseButton={user.role === 'SUPERVISOR'}
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-gray-50">
+                            <TableHead className="font-semibold">Date</TableHead>
+                            <TableHead className="font-semibold">Line</TableHead>
+                            <TableHead className="font-semibold">Shift</TableHead>
+                            <TableHead className="font-semibold">Hour</TableHead>
+                            <TableHead className="font-semibold">Model</TableHead>
+                            <TableHead className="font-semibold">Production</TableHead>
+                            <TableHead className="font-semibold">Efficiency</TableHead>
+                            <TableHead className="font-semibold">Status</TableHead>
+                            <TableHead className="font-semibold">Team Leader</TableHead>
+                            <TableHead className="font-semibold">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedEntries.map((entry) => {
+                            const totalParts = entry.goodParts + entry.rejects
+                            const efficiency = totalParts > 0 ? Math.round((entry.goodParts / totalParts) * 100) : 0
+                           
+                           return (
+                             <TableRow key={entry.id} className="hover:bg-gray-50">
+                               <TableCell className="font-medium">
+                                 <div className="flex items-center">
+                                   <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                                   {new Date(entry.date).toLocaleDateString()}
+                                 </div>
+                               </TableCell>
+                               <TableCell>
+                                 <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                                   {entry.line}
+                                 </Badge>
+                               </TableCell>
+                               <TableCell>
+                                 <Badge variant="outline">
+                                   {entry.shift}
+                                 </Badge>
+                               </TableCell>
+                               <TableCell>
+                                 <Badge variant="outline" className="bg-gray-100 text-gray-700 font-mono text-xs">
+                                   {entry.hour}
+                                 </Badge>
+                               </TableCell>
+                               <TableCell>{entry.model}</TableCell>
+                               <TableCell>
+                                 <div className="space-y-1">
+                                   <div className="flex items-center text-sm">
+                                     <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                                     <span className="text-green-600 font-medium">
+                                       {entry.goodParts.toLocaleString()}
+                                     </span>
+                                   </div>
+                                   <div className="flex items-center text-sm">
+                                     <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                                     <span className="text-red-600">
+                                       {entry.rejects.toLocaleString()}
+                                     </span>
+                                   </div>
+                                 </div>
+                               </TableCell>
+                               <TableCell>
+                                 <div className="flex items-center space-x-2">
+                                   <div className="w-12 bg-gray-200 rounded-full h-2">
+                                     <div 
+                                       className={`h-2 rounded-full ${
+                                         efficiency >= 95 ? 'bg-green-500' : 
+                                         efficiency >= 85 ? 'bg-blue-500' : 
+                                         efficiency >= 75 ? 'bg-yellow-500' : 'bg-red-500'
+                                       }`}
+                                       style={{ width: `${efficiency}%` }}
+                                     ></div>
+                                   </div>
+                                   <span className="text-sm font-medium">{efficiency}%</span>
+                                 </div>
+                               </TableCell>
+                               <TableCell>
+                                 <div className="space-y-1">
+                                   {getStatusBadge(entry.status)}
+                                   {entry.status === 'REJECTED' && entry.rejectionReason && (
+                                     <div className="text-xs text-red-600 max-w-48 truncate">
+                                       Reason: {entry.rejectionReason}
+                                     </div>
+                                   )}
+                                 </div>
+                               </TableCell>
+                               <TableCell>
+                                 <div className="text-sm">
+                                   <div className="font-medium">{entry.submittedBy.name}</div>
+                                   <div className="text-gray-500">
+                                     {new Date(entry.createdAt).toLocaleDateString()}
+                                   </div>
+                                 </div>
+                               </TableCell>
+                               <TableCell>
+                                 <div className="flex flex-wrap gap-2">
+                                   <Button
+                                     size="sm"
+                                     variant="outline"
+                                     onClick={() => handleViewDetails(entry)}
+                                   >
+                                     <Eye className="mr-1 h-3 w-3" />
+                                     View
+                                   </Button>
+                                   
+                                   {/* Edit button for Team Leaders (only pending entries) */}
+                                   {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
+                                     <Button
+                                       size="sm"
+                                       variant="outline"
+                                       onClick={() => handleEditEntry(entry.id)}
+                                     >
+                                       <Edit className="mr-1 h-3 w-3" />
+                                       Edit
+                                     </Button>
+                                   )}
+                                   
+                                   {/* Edit button for Supervisors (all entries) */}
+                                   {user.role === 'SUPERVISOR' && (
+                                     <Button
+                                       size="sm"
+                                       variant="outline"
+                                       onClick={() => handleEditEntry(entry.id)}
+                                     >
+                                       <Edit className="mr-1 h-3 w-3" />
+                                       Edit
+                                     </Button>
+                                   )}
+                                   
+                                   {/* Approval buttons for Supervisors */}
+                                   {user.role === 'SUPERVISOR' && entry.status === 'PENDING' && (
+                                     <>
+                                       <Button
+                                         size="sm"
+                                         onClick={() => handleApproval(entry.id, 'APPROVED')}
+                                         className="bg-green-600 hover:bg-green-700"
+                                         disabled={submitting}
+                                       >
+                                         <CheckCircle className="mr-1 h-3 w-3" />
+                                         Approve
+                                       </Button>
+                                       <Button
+                                         size="sm"
+                                         variant="destructive"
+                                         onClick={() => handleRejectClick(entry.id)}
+                                         disabled={submitting}
+                                       >
+                                         <XCircle className="mr-1 h-3 w-3" />
+                                         Reject
+                                       </Button>
+                                     </>
+                                   )}
+                                 </div>
+                               </TableCell>
+                             </TableRow>
+                           )
+                         })}
+                       </TableBody>
+                     </Table>
+                   </div>
 
-      {/* Rejection Dialog */}
-      <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-red-700">
-              <XCircle className="mr-2 h-5 w-5" />
-              Reject Entry
-            </DialogTitle>
-            <DialogDescription>
-              Please provide a reason for rejecting this production entry. The team leader will see this feedback.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
+                   {/* Pagination */}
+                   {pagination.totalPages > 1 && (
+                     <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                       <div className="text-sm text-gray-600">
+                         Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
+                         {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
+                         {pagination.totalItems} entries
+                       </div>
+                       
+                       <div className="flex items-center space-x-2">
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           onClick={() => changePage(pagination.currentPage - 1)}
+                           disabled={pagination.currentPage === 1}
+                           className="h-8"
+                         >
+                           <ChevronLeft className="h-4 w-4" />
+                           Previous
+                         </Button>
+                         
+                         <div className="flex items-center space-x-1">
+                           {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                             let pageNum: number
+                             
+                             if (pagination.totalPages <= 5) {
+                               pageNum = i + 1
+                             } else {
+                               if (pagination.currentPage <= 3) {
+                                 pageNum = i + 1
+                               } else if (pagination.currentPage >= pagination.totalPages - 2) {
+                                 pageNum = pagination.totalPages - 4 + i
+                               } else {
+                                 pageNum = pagination.currentPage - 2 + i
+                               }
+                             }
+                             
+                             return (
+                               <Button
+                                 key={pageNum}
+                                 variant={pagination.currentPage === pageNum ? "default" : "outline"}
+                                 size="sm"
+                                 onClick={() => changePage(pageNum)}
+                                 className="h-8 w-8 p-0"
+                               >
+                                 {pageNum}
+                               </Button>
+                             )
+                           })}
+                         </div>
+                         
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           onClick={() => changePage(pagination.currentPage + 1)}
+                           disabled={pagination.currentPage === pagination.totalPages}
+                           className="h-8"
+                         >
+                           Next
+                           <ChevronRight className="h-4 w-4" />
+                         </Button>
+                       </div>
+                     </div>
+                   )}
+                 </>
+               )}
+             </>
+           ) : (
+             // Entry Form View
+             <div className="max-w-none">
+               <EntryForm 
+                 onSuccess={handleEntrySuccess}
+                 onClose={user.role === 'SUPERVISOR' ? handleBackToEntries : undefined}
+                 editingEntry={editingEntry}
+                 isEditing={!!editingEntry}
+                 showCloseButton={user.role === 'SUPERVISOR'}
+               />
+             </div>
+           )}
+         </CardContent>
+       </Card>
+     </div>
+
+     {/* Rejection Dialog */}
+     <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
+       <DialogContent className="max-w-md">
+         <DialogHeader>
+           <DialogTitle className="flex items-center text-red-700">
+             <XCircle className="mr-2 h-5 w-5" />
+             Reject Entry
+           </DialogTitle>
+           <DialogDescription>
+             Please provide a reason for rejecting this production entry. The team leader will see this feedback.
+           </DialogDescription>
+         </DialogHeader>
+         <div className="space-y-4">
+           <div>
              <Label htmlFor="rejectionReason">Rejection Reason *</Label>
              <Textarea
                id="rejectionReason"
@@ -733,4 +1059,3 @@ export default function Dashboard({ user }: DashboardProps) {
    </div>
  )
 }
-          

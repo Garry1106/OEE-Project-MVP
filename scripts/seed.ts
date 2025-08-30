@@ -88,64 +88,64 @@ async function main() {
   })
 
   // Seed Sample Entries
-  console.log('📝 Seeding sample entries...')
-  const sampleEntries = [
-    {
-      date: new Date('2024-12-01'),
-      line: 'Line 1',
-      shift: 'Morning',
-      teamLeader: 'John Smith',
-      shiftInCharge: 'David Lee',
-      model: 'Model A',
-      numOfOperators: 5,
-      availableTime: '480',
-      lineCapacity: '100',
-      ppcTarget: 500,
-      goodParts: 480,
-      rejects: 20,
-      problemHead: 'Quality Issue',
-      description: 'Defective parts',
-      lossTime: 30,
-      responsibility: 'Production',
-      rejectionPhenomena: 'Surface defect',
-      rejectionCause: 'Tool wear',
-      rejectionCorrectiveAction: 'Tool replacement',
-      rejectionCount: 20,
-      status: 'APPROVED' as const,
-      submittedById: teamLeader.id,
-      approvedById: supervisor.id
-    },
-    {
-      date: new Date('2024-12-02'),
-      line: 'Line 2',
-      shift: 'Evening',
-      teamLeader: 'Sarah Johnson',
-      shiftInCharge: 'Emma Davis',
-      model: 'Model B',
-      numOfOperators: 4,
-      availableTime: '450',
-      lineCapacity: '120',
-      ppcTarget: 540,
-      goodParts: 520,
-      rejects: 15,
-      problemHead: 'Machine Breakdown',
-      description: 'Equipment failure',
-      lossTime: 45,
-      responsibility: 'Maintenance',
-      rejectionPhenomena: 'Dimension error',
-      rejectionCause: 'Calibration issue',
-      rejectionCorrectiveAction: 'Machine recalibration',
-      rejectionCount: 15,
-      status: 'PENDING' as const,
-      submittedById: teamLeader.id
-    }
-  ]
+  // console.log('📝 Seeding sample entries...')
+  // const sampleEntries = [
+  //   {
+  //     date: new Date('2024-12-01'),
+  //     line: 'Line 1',
+  //     shift: 'Morning',
+  //     teamLeader: 'John Smith',
+  //     shiftInCharge: 'David Lee',
+  //     model: 'Model A',
+  //     numOfOperators: 5,
+  //     availableTime: '480',
+  //     lineCapacity: '100',
+  //     ppcTarget: 500,
+  //     goodParts: 480,
+  //     rejects: 20,
+  //     problemHead: 'Quality Issue',
+  //     description: 'Defective parts',
+  //     lossTime: 30,
+  //     responsibility: 'Production',
+  //     rejectionPhenomena: 'Surface defect',
+  //     rejectionCause: 'Tool wear',
+  //     rejectionCorrectiveAction: 'Tool replacement',
+  //     rejectionCount: 20,
+  //     status: 'APPROVED' as const,
+  //     submittedById: teamLeader.id,
+  //     approvedById: supervisor.id
+  //   },
+  //   {
+  //     date: new Date('2024-12-02'),
+  //     line: 'Line 2',
+  //     shift: 'Evening',
+  //     teamLeader: 'Sarah Johnson',
+  //     shiftInCharge: 'Emma Davis',
+  //     model: 'Model B',
+  //     numOfOperators: 4,
+  //     availableTime: '450',
+  //     lineCapacity: '120',
+  //     ppcTarget: 540,
+  //     goodParts: 520,
+  //     rejects: 15,
+  //     problemHead: 'Machine Breakdown',
+  //     description: 'Equipment failure',
+  //     lossTime: 45,
+  //     responsibility: 'Maintenance',
+  //     rejectionPhenomena: 'Dimension error',
+  //     rejectionCause: 'Calibration issue',
+  //     rejectionCorrectiveAction: 'Machine recalibration',
+  //     rejectionCount: 15,
+  //     status: 'PENDING' as const,
+  //     submittedById: teamLeader.id
+  //   }
+  // ]
 
-  for (const entryData of sampleEntries) {
-    await prisma.entry.create({
-      data: entryData
-    })
-  }
+  // for (const entryData of sampleEntries) {
+  //   await prisma.entry.create({
+  //     data: entryData
+  //   })
+  // }
 
   const admin = await prisma.user.create({
   data: {

@@ -24,10 +24,11 @@ model Entry {
   date            DateTime
   line            String
   shift           String
+  hour            String   // Add this field
   teamLeader      String
   shiftInCharge   String
   model           String
-  operatorNames   String[]  // New field for operator names
+  operatorNames   String[]
   availableTime   String
   lineCapacity    String
   ppcTarget       Int
@@ -37,16 +38,16 @@ model Entry {
   description     String
   lossTime        Int
   responsibility  String
-  productionType  String?   // New field: Sets or Single
-  defectType      String?   // New field: Repeat or New
-  newDefectDescription String?  // New field for new defects
+  productionType  ProductionType?
+  defectType      DefectType?
+  newDefectDescription String?
   
   // Rejection details
   rejectionPhenomena       String?
   rejectionCause           String?
   rejectionCorrectiveAction String?
   rejectionCount           Int?
-  rejectionReason          String?  // New field for supervisor rejection reason
+  rejectionReason          String?
   
   status          Status
   submittedById   String   @db.ObjectId
@@ -56,6 +57,40 @@ model Entry {
   
   submittedBy User  @relation("SubmittedBy", fields: [submittedById], references: [id])
   approvedBy  User? @relation("ApprovedBy", fields: [approvedById], references: [id])
+  
+  @@unique([date, shift, line, hour])
+
+
+
+  has4MChange    Boolean  @default(false)
+  
+  // Man category
+  manChange      Boolean? @default(false)
+  manReason      String?
+  manCC          String? // Critical Characteristics
+  manSC          String? // Significant Characteristics  
+  manGeneral     String?
+  
+  // Machine category
+  machineChange  Boolean? @default(false)
+  machineReason  String?
+  machineCC      String?
+  machineSC      String?
+  machineGeneral String?
+  
+  // Material category
+  materialChange Boolean? @default(false)
+  materialReason String?
+  materialCC     String?
+  materialSC     String?
+  materialGeneral String?
+  
+  // Method/Tool/Fixture/Die category
+  methodChange   Boolean? @default(false)
+  methodReason   String?
+  methodCC       String?
+  methodSC       String?
+  methodGeneral  String?
 }
 
 model Parameter {
@@ -74,6 +109,16 @@ enum Status {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum ProductionType {
+  SINGLE
+  SETS
+}
+
+enum DefectType {
+  REPEAT
+  NEW
 }
 
 enum ParameterType {

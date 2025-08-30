@@ -6,10 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import EntryForm from './EntryForm'
 import EntryDetails from './EntryDetails'
 import { useRouter } from 'next/navigation'
+import { Entry, User } from '@/types'
 import { 
   Plus, 
   BarChart3, 
@@ -24,95 +28,156 @@ import {
   List,
   Eye,
   Calendar,
-  TrendingUp
+  Edit,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react'
 
-interface Entry {
-  id: string
-  date: string
-  line: string
-  shift: string
-  teamLeader: string
-  shiftInCharge: string
-  model: string
-  numOfOperators: number
-  availableTime: string
-  lineCapacity: string
-  ppcTarget: number
-  goodParts: number
-  rejects: number
-  problemHead: string
-  description: string
-  lossTime: number
-  responsibility: string
-  rejectionPhenomena: string | null
-  rejectionCause: string | null
-  rejectionCorrectiveAction: string | null
-  rejectionCount: number | null
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-  submittedBy: { name: string; email: string }
-  approvedBy?: { name: string; email: string }
-  createdAt: string
-  updatedAt: string
+interface DashboardProps {
+  user: User
 }
 
-interface User {
-  role: 'TEAM_LEADER' | 'SUPERVISOR'
-  name: string
-  email: string
-}
-
-export default function Dashboard({ user }: { user: User }) {
+export default function Dashboard({ user }: DashboardProps) {
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
   const [activeView, setActiveView] = useState<'entries' | 'create' | 'details'>('entries')
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null)
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false)
+  const [pendingRejectionId, setPendingRejectionId] = useState<string | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  
   const router = useRouter()
 
   useEffect(() => {
     fetchEntries()
   }, [filter])
 
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
   const fetchEntries = async () => {
     try {
       const url = filter === 'all' ? '/api/entries' : `/api/entries?status=${filter.toUpperCase()}`
       const response = await fetch(url)
-      const data = await response.json()
-      setEntries(data)
+      if (response.ok) {
+        const data = await response.json()
+        setEntries(data)
+      } else {
+        setNotification({ type: 'error', message: 'Failed to fetch entries' })
+      }
     } catch (error) {
       console.error('Failed to fetch entries:', error)
+      setNotification({ type: 'error', message: 'Failed to fetch entries' })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleApproval = async (entryId: string, status: 'APPROVED' | 'REJECTED') => {
+  const handleApproval = async (entryId: string, status: 'APPROVED' | 'REJECTED', reason?: string) => {
     try {
+      setSubmitting(true)
       const response = await fetch(`/api/entries/${entryId}/approve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ 
+          status,
+          rejectionReason: status === 'REJECTED' ? reason : undefined
+        })
       })
 
       if (response.ok) {
-        fetchEntries()
+        await fetchEntries()
+        setNotification({ 
+          type: 'success', 
+          message: `Entry ${status.toLowerCase()} successfully!` 
+        })
+        
         // If we're viewing details of the approved/rejected entry, refresh the details
         if (selectedEntry && selectedEntry.id === entryId) {
           const updatedEntry = entries.find(e => e.id === entryId)
           if (updatedEntry) {
-            setSelectedEntry({ ...updatedEntry, status })
+            setSelectedEntry({ ...updatedEntry, status, rejectionReason: reason })
           }
         }
+      } else {
+        const errorData = await response.json()
+        setNotification({ 
+          type: 'error', 
+          message: errorData.error || 'Failed to update entry status' 
+        })
       }
     } catch (error) {
       console.error('Failed to update entry status:', error)
+      setNotification({ type: 'error', message: 'Network error occurred' })
+    } finally {
+      setSubmitting(false)
     }
+  }
+
+  const handleRejectClick = (entryId: string) => {
+    setPendingRejectionId(entryId)
+    setRejectionDialogOpen(true)
+  }
+
+  const handleRejectConfirm = async () => {
+    if (pendingRejectionId && rejectionReason.trim()) {
+      await handleApproval(pendingRejectionId, 'REJECTED', rejectionReason.trim())
+      setRejectionDialogOpen(false)
+      setPendingRejectionId(null)
+      setRejectionReason('')
+    }
+  }
+
+  const handleRejectCancel = () => {
+    setRejectionDialogOpen(false)
+    setPendingRejectionId(null)
+    setRejectionReason('')
   }
 
   const handleViewDetails = (entry: Entry) => {
     setSelectedEntry(entry)
     setActiveView('details')
+  }
+
+  const handleEditEntry = async (entryId: string) => {
+    try {
+      const response = await fetch(`/api/entries/${entryId}`)
+      if (response.ok) {
+        const entry: Entry = await response.json()
+        // Ensure operatorNames is always an array
+        const normalizedEntry: Entry = {
+          ...entry,
+          operatorNames: entry.operatorNames || []
+        }
+        setEditingEntry(normalizedEntry)
+        setSelectedEntry(null)
+        setActiveView('create')
+      } else {
+        setNotification({ type: 'error', message: 'Failed to fetch entry for editing' })
+      }
+    } catch (error) {
+      console.error('Failed to fetch entry for editing:', error)
+      setNotification({ type: 'error', message: 'Failed to fetch entry for editing' })
+    }
+  }
+
+  const handleEditFromDetails = (entry: Entry) => {
+    // Ensure operatorNames is always an array
+    const normalizedEntry: Entry = {
+      ...entry,
+      operatorNames: entry.operatorNames || []
+    }
+    setEditingEntry(normalizedEntry)
+    setSelectedEntry(null)
+    setActiveView('create')
   }
 
   const handleLogout = async () => {
@@ -126,12 +191,24 @@ export default function Dashboard({ user }: { user: User }) {
 
   const handleEntrySuccess = () => {
     setActiveView('entries')
+    setEditingEntry(null)
     fetchEntries()
+    setNotification({ 
+      type: 'success', 
+      message: editingEntry ? 'Entry updated successfully!' : 'Entry submitted successfully!' 
+    })
   }
 
   const handleBackToEntries = () => {
     setActiveView('entries')
     setSelectedEntry(null)
+    setEditingEntry(null)
+  }
+
+  const handleCreateNew = () => {
+    setEditingEntry(null)
+    setSelectedEntry(null)
+    setActiveView('create')
   }
 
   const getStatusBadge = (status: string) => {
@@ -222,8 +299,10 @@ export default function Dashboard({ user }: { user: User }) {
           <EntryDetails 
             entry={selectedEntry} 
             onClose={handleBackToEntries}
+            onEdit={handleEditFromDetails}
             onApprove={user.role === 'SUPERVISOR' ? handleApproval : undefined}
             showActions={user.role === 'SUPERVISOR'}
+            userRole={user.role}
           />
         </div>
       </div>
@@ -271,6 +350,26 @@ export default function Dashboard({ user }: { user: User }) {
       </header>
 
       <div className="max-w-7xl mx-auto p-6">
+        {/* Notification */}
+        {notification && (
+          <Alert className={`mb-6 ${
+            notification.type === 'success' 
+              ? 'border-green-200 bg-green-50' 
+              : 'border-red-200 bg-red-50'
+          }`}>
+            {notification.type === 'success' ? (
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+            )}
+            <AlertDescription className={
+              notification.type === 'success' ? 'text-green-800' : 'text-red-800'
+            }>
+              {notification.message}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="hover:shadow-md transition-shadow">
@@ -324,40 +423,45 @@ export default function Dashboard({ user }: { user: User }) {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
               <div>
                 <CardTitle className="text-xl text-gray-900">
-                  {activeView === 'entries' ? 'Production Entries' : 'Create New Entry'}
+                  {activeView === 'entries' 
+                    ? 'Production Entries' 
+                    : editingEntry 
+                      ? 'Edit Production Entry'
+                      : 'Create New Entry'
+                  }
                 </CardTitle>
                 <CardDescription>
                   {activeView === 'entries' 
                     ? user.role === 'TEAM_LEADER' 
                       ? 'Manage your production data entries and track approval status'
                       : 'Review and approve production entries from team leaders'
-                    : 'Fill in the production data for supervisor approval'
+                    : editingEntry
+                      ? 'Modify production data details'
+                      : 'Fill in the production data for supervisor approval'
                   }
                 </CardDescription>
               </div>
 
-              {user.role === 'TEAM_LEADER' && (
-                <div className="flex space-x-2">
-                  {activeView === 'create' && (
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setActiveView('entries')}
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Back to Entries
-                    </Button>
-                  )}
-                  {activeView === 'entries' && (
-                    <Button 
-                      className="bg-blue-600 hover:bg-blue-700"
-                      onClick={() => setActiveView('create')}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      New Entry
-                    </Button>
-                  )}
-                </div>
-              )}
+              <div className="flex space-x-2">
+                {activeView === 'create' && (
+                  <Button 
+                    variant="outline" 
+                    onClick={handleBackToEntries}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back 
+                  </Button>
+                )}
+                {activeView === 'entries' && (
+                  <Button 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={handleCreateNew}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Entry
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
 
@@ -400,18 +504,16 @@ export default function Dashboard({ user }: { user: User }) {
                     <p className="text-gray-400 mb-6">
                       {user.role === 'TEAM_LEADER' 
                         ? 'Create your first production entry to get started'
-                        : 'No entries are currently pending review'
+                        : 'No entries are currently available for review'
                       }
                     </p>
-                    {user.role === 'TEAM_LEADER' && (
-                      <Button 
-                        onClick={() => setActiveView('create')}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create First Entry
-                      </Button>
-                    )}
+                    <Button 
+                      onClick={handleCreateNew}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create First Entry
+                    </Button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -480,7 +582,16 @@ export default function Dashboard({ user }: { user: User }) {
                                   <span className="text-sm font-medium">{efficiency}%</span>
                                 </div>
                               </TableCell>
-                              <TableCell>{getStatusBadge(entry.status)}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  {getStatusBadge(entry.status)}
+                                  {entry.status === 'REJECTED' && entry.rejectionReason && (
+                                    <div className="text-xs text-red-600 max-w-48 truncate">
+                                      Reason: {entry.rejectionReason}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell>
                                 <div className="text-sm">
                                   <div className="font-medium">{entry.submittedBy.name}</div>
@@ -490,7 +601,7 @@ export default function Dashboard({ user }: { user: User }) {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <div className="flex space-x-2">
+                                <div className="flex flex-wrap gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -499,12 +610,39 @@ export default function Dashboard({ user }: { user: User }) {
                                     <Eye className="mr-1 h-3 w-3" />
                                     View
                                   </Button>
+                                  
+                                  {/* Edit button for Team Leaders (only pending entries) */}
+                                  {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleEditEntry(entry.id)}
+                                    >
+                                      <Edit className="mr-1 h-3 w-3" />
+                                      Edit
+                                    </Button>
+                                  )}
+                                  
+                                  {/* Edit button for Supervisors (all entries) */}
+                                  {user.role === 'SUPERVISOR' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleEditEntry(entry.id)}
+                                    >
+                                      <Edit className="mr-1 h-3 w-3" />
+                                      Edit
+                                    </Button>
+                                  )}
+                                  
+                                  {/* Approval buttons for Supervisors */}
                                   {user.role === 'SUPERVISOR' && entry.status === 'PENDING' && (
                                     <>
                                       <Button
                                         size="sm"
                                         onClick={() => handleApproval(entry.id, 'APPROVED')}
                                         className="bg-green-600 hover:bg-green-700"
+                                        disabled={submitting}
                                       >
                                         <CheckCircle className="mr-1 h-3 w-3" />
                                         Approve
@@ -512,7 +650,8 @@ export default function Dashboard({ user }: { user: User }) {
                                       <Button
                                         size="sm"
                                         variant="destructive"
-                                        onClick={() => handleApproval(entry.id, 'REJECTED')}
+                                        onClick={() => handleRejectClick(entry.id)}
+                                        disabled={submitting}
                                       >
                                         <XCircle className="mr-1 h-3 w-3" />
                                         Reject
@@ -532,12 +671,66 @@ export default function Dashboard({ user }: { user: User }) {
             ) : (
               // Entry Form View
               <div className="max-w-none">
-                <EntryForm onSuccess={handleEntrySuccess} />
+                <EntryForm 
+                  onSuccess={handleEntrySuccess}
+                  onClose={user.role === 'SUPERVISOR' ? handleBackToEntries : undefined}
+                  editingEntry={editingEntry}
+                  isEditing={!!editingEntry}
+                  showCloseButton={user.role === 'SUPERVISOR'}
+                />
               </div>
             )}
           </CardContent>
         </Card>
       </div>
-    </div>
-  )
+
+      {/* Rejection Dialog */}
+      <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-700">
+              <XCircle className="mr-2 h-5 w-5" />
+              Reject Entry
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this production entry. The team leader will see this feedback.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+             <Label htmlFor="rejectionReason">Rejection Reason *</Label>
+             <Textarea
+               id="rejectionReason"
+               value={rejectionReason}
+               onChange={(e) => setRejectionReason(e.target.value)}
+               placeholder="Enter detailed reason for rejection..."
+               className="mt-1 min-h-[100px]"
+               required
+             />
+           </div>
+           <div className="flex justify-end space-x-2">
+             <Button variant="outline" onClick={handleRejectCancel} disabled={submitting}>
+               Cancel
+             </Button>
+             <Button 
+               variant="destructive" 
+               onClick={handleRejectConfirm}
+               disabled={!rejectionReason.trim() || submitting}
+             >
+               {submitting ? (
+                 <>
+                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   Rejecting...
+                 </>
+               ) : (
+                 'Reject Entry'
+               )}
+             </Button>
+           </div>
+         </div>
+       </DialogContent>
+     </Dialog>
+   </div>
+ )
 }
+          

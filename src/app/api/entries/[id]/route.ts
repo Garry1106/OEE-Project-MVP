@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromToken } from '@/lib/auth'
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const token = request.cookies.get('token')?.value
     if (!token) {
@@ -14,38 +17,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status')
-
-    let where: any = {}
-    
-    if (user.role === 'TEAM_LEADER') {
-      where.submittedById = user.id
-    }
-    
-    if (status) {
-      where.status = status
-    }
-
-    const entries = await prisma.entry.findMany({
-      where,
+    const entry = await prisma.entry.findUnique({
+      where: { id: params.id },
       include: {
         submittedBy: { select: { name: true, email: true } },
         approvedBy: { select: { name: true, email: true } }
-      },
-      orderBy: { createdAt: 'desc' }
+      }
     })
 
-    return NextResponse.json(entries)
+    if (!entry) {
+      return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+    }
+
+    // Team leaders can only access their own entries
+    if (user.role === 'TEAM_LEADER' && entry.submittedById !== user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    return NextResponse.json(entry)
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch entries' },
+      { error: 'Failed to fetch entry' },
       { status: 500 }
     )
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const token = request.cookies.get('token')?.value
     if (!token) {
@@ -53,13 +54,32 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getUserFromToken(token)
-    if (!user || user.role !== 'TEAM_LEADER') {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const entry = await prisma.entry.findUnique({
+      where: { id: params.id }
+    })
+
+    if (!entry) {
+      return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+    }
+
+    // Check permissions
+    if (user.role === 'TEAM_LEADER' && entry.submittedById !== user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    // Team leaders can only edit pending entries
+    if (user.role === 'TEAM_LEADER' && entry.status !== 'PENDING') {
+      return NextResponse.json({ error: 'Can only edit pending entries' }, { status: 400 })
     }
 
     const data = await request.json()
     
-    const entry = await prisma.entry.create({
+    const updatedEntry = await prisma.entry.update({
+      where: { id: params.id },
       data: {
         date: new Date(data.date),
         line: data.line,
@@ -84,16 +104,15 @@ export async function POST(request: NextRequest) {
         rejectionCause: data.rejectionCause || null,
         rejectionCorrectiveAction: data.rejectionCorrectiveAction || null,
         rejectionCount: data.rejectionCount || null,
-        submittedById: user.id,
-        status: 'PENDING'
+        updatedAt: new Date()
       }
     })
 
-    return NextResponse.json(entry)
+    return NextResponse.json(updatedEntry)
   } catch (error) {
-    console.error('Entry creation error:', error)
+    console.error('Entry update error:', error)
     return NextResponse.json(
-      { error: 'Failed to create entry' },
+      { error: 'Failed to update entry' },
       { status: 500 }
     )
   }

@@ -27,7 +27,7 @@ model Entry {
   teamLeader      String
   shiftInCharge   String
   model           String
-  numOfOperators  Int
+  operatorNames   String[]  // New field for operator names
   availableTime   String
   lineCapacity    String
   ppcTarget       Int
@@ -37,12 +37,16 @@ model Entry {
   description     String
   lossTime        Int
   responsibility  String
+  productionType  String?   // New field: Sets or Single
+  defectType      String?   // New field: Repeat or New
+  newDefectDescription String?  // New field for new defects
   
-  // Rejection details included directly in entry
-  rejectionPhenomena    String?
-  rejectionCause        String?
+  // Rejection details
+  rejectionPhenomena       String?
+  rejectionCause           String?
   rejectionCorrectiveAction String?
-  rejectionCount        Int?
+  rejectionCount           Int?
+  rejectionReason          String?  // New field for supervisor rejection reason
   
   status          Status
   submittedById   String   @db.ObjectId

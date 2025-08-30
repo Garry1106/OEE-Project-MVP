@@ -4,7 +4,7 @@ import { getUserFromToken } from '@/lib/auth'
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const token = request.cookies.get('token')?.value
@@ -17,18 +17,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { status } = await request.json()
+    const { status, rejectionReason } = await request.json()
     
-    // Await the params Promise
-    const { id } = await params
+    const updateData: any = {
+      status: status as 'APPROVED' | 'REJECTED',
+      approvedById: user.id,
+      updatedAt: new Date()
+    }
+
+    // Add rejection reason if status is REJECTED
+    if (status === 'REJECTED' && rejectionReason) {
+      updateData.rejectionReason = rejectionReason
+    }
     
     const entry = await prisma.entry.update({
-      where: { id },
-      data: {
-        status: status as 'APPROVED' | 'REJECTED',
-        approvedById: user.id,
-        updatedAt: new Date()
-      }
+      where: { id: params.id },
+      data: updateData
     })
 
     return NextResponse.json(entry)

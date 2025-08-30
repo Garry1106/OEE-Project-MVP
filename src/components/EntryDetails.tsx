@@ -3,7 +3,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { useState } from 'react'
+import { Entry } from '@/types'
 import { 
   Calendar,
   Factory,
@@ -18,67 +22,79 @@ import {
   Info,
   Award,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Loader2,
+  Eye,
+  Settings,
+  Edit
 } from 'lucide-react'
-
-interface Entry {
-  id: string
-  date: string
-  line: string
-  shift: string
-  teamLeader: string
-  shiftInCharge: string
-  model: string
-  numOfOperators: number
-  availableTime: string
-  lineCapacity: string
-  ppcTarget: number
-  goodParts: number
-  rejects: number
-  problemHead: string
-  description: string
-  lossTime: number
-  responsibility: string
-  rejectionPhenomena: string | null
-  rejectionCause: string | null
-  rejectionCorrectiveAction: string | null
-  rejectionCount: number | null
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-  submittedBy: { name: string; email: string }
-  approvedBy?: { name: string; email: string }
-  createdAt: string
-  updatedAt: string
-}
 
 interface EntryDetailsProps {
   entry: Entry
   onClose: () => void
-  onApprove?: (id: string, status: 'APPROVED' | 'REJECTED') => void
+  onEdit?: (entry: Entry) => void
+  onApprove?: (id: string, status: 'APPROVED' | 'REJECTED', reason?: string) => void
   showActions?: boolean
+  userRole?: string
 }
 
-export default function EntryDetails({ entry, onClose, onApprove, showActions = true }: EntryDetailsProps) {
+export default function EntryDetails({ entry, onClose, onEdit, onApprove, showActions = true, userRole }: EntryDetailsProps) {
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
   const totalProduction = entry.goodParts + entry.rejects
   const efficiency = totalProduction > 0 ? Math.round((entry.goodParts / totalProduction) * 100) : 0
   const rejectRate = totalProduction > 0 ? Math.round((entry.rejects / totalProduction) * 100) : 0
   const targetAchievement = entry.ppcTarget > 0 ? Math.round((totalProduction / entry.ppcTarget) * 100) : 0
+
+  const handleApprove = () => {
+    if (onApprove) {
+      onApprove(entry.id, 'APPROVED')
+    }
+  }
+
+  const handleRejectClick = () => {
+    setRejectionDialogOpen(true)
+  }
+
+  const handleRejectConfirm = async () => {
+    if (onApprove && rejectionReason.trim()) {
+      setSubmitting(true)
+      await onApprove(entry.id, 'REJECTED', rejectionReason.trim())
+      setSubmitting(false)
+      setRejectionDialogOpen(false)
+      setRejectionReason('')
+    }
+  }
+
+  const handleRejectCancel = () => {
+    setRejectionDialogOpen(false)
+    setRejectionReason('')
+  }
+
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(entry)
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     const config = {
       PENDING: { 
         variant: 'secondary' as const, 
         icon: Clock, 
-        className: 'bg-yellow-100 text-yellow-800 border-yellow-300' 
+        className: 'bg-yellow-500' 
       },
       APPROVED: { 
         variant: 'default' as const, 
         icon: CheckCircle, 
-        className: 'bg-green-100 text-green-800 border-green-300' 
+        className: 'bg-green-500' 
       },
       REJECTED: { 
         variant: 'destructive' as const, 
         icon: XCircle, 
-        className: 'bg-red-100 text-red-800 border-red-300' 
+        className: 'bg-red-500' 
       }
     }
     
@@ -87,7 +103,7 @@ export default function EntryDetails({ entry, onClose, onApprove, showActions = 
     
     return (
       <Badge variant={statusConfig.variant} className={statusConfig.className}>
-        <Icon className="w-3 h-3 mr-1" />
+        <Icon className="w-4 h-4 mr-1" />
         {status}
       </Badge>
     )
@@ -119,24 +135,30 @@ export default function EntryDetails({ entry, onClose, onApprove, showActions = 
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <Card>
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
+      <Card className="shadow-lg border">
+        <CardHeader className="">
           <div className="flex justify-between items-start">
-            <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Factory className="h-5 w-5 text-blue-600" />
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 rounded flex items-center justify-center border">
+                <Eye className="h-6 w-6" />
               </div>
               <div>
-                <CardTitle className="text-2xl text-gray-900">Production Entry Details</CardTitle>
-                <CardDescription className="text-gray-600">
+                <CardTitle className="text-2xl font-bold">Production Entry Details</CardTitle>
+                <CardDescription className="text-gray-600 mt-1">
                   Entry ID: {entry.id.slice(-8)} • Created: {new Date(entry.createdAt).toLocaleString()}
                 </CardDescription>
               </div>
             </div>
             <div className="flex items-center space-x-2">
               {getStatusBadge(entry.status)}
+              {onEdit && (
+                <Button variant="outline" size="sm" onClick={handleEdit}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={onClose}>
                 Close
               </Button>
@@ -145,307 +167,432 @@ export default function EntryDetails({ entry, onClose, onApprove, showActions = 
         </CardHeader>
       </Card>
 
-      {/* Performance Metrics */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <BarChart3 className="mr-2 h-5 w-5 text-purple-600" />
-            Performance Metrics
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-gray-900">{totalProduction.toLocaleString()}</div>
-              <div className="text-sm text-gray-600">Total Production</div>
-            </div>
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className={`text-2xl font-bold flex items-center justify-center ${getPerformanceIndicator(efficiency, 'efficiency').color}`}>
-                {(() => {
-                  const { Icon } = getPerformanceIndicator(efficiency, 'efficiency')
-                  return <Icon className="w-5 h-5 mr-1" />
-                })()}
-                {efficiency}%
-              </div>
-              <div className="text-sm text-gray-600">Efficiency</div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div 
-                  className={`h-2 rounded-full ${
-                    efficiency >= 95 ? 'bg-green-500' : 
-                    efficiency >= 85 ? 'bg-blue-500' : 
-                    efficiency >= 75 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${efficiency}%` }}
-                />
-              </div>
-            </div>
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className={`text-2xl font-bold flex items-center justify-center ${getPerformanceIndicator(rejectRate, 'rejectRate').color}`}>
-                {(() => {
-                  const { Icon } = getPerformanceIndicator(rejectRate, 'rejectRate')
-                  return <Icon className="w-5 h-5 mr-1" />
-                })()}
-                {rejectRate}%
-              </div>
-              <div className="text-sm text-gray-600">Reject Rate</div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div 
-                  className={`h-2 rounded-full ${
-                    rejectRate <= 2 ? 'bg-green-500' : 
-                    rejectRate <= 5 ? 'bg-blue-500' : 
-                    rejectRate <= 10 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${Math.min(rejectRate, 100)}%` }}
-                />
-              </div>
-            </div>
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className={`text-2xl font-bold flex items-center justify-center ${getPerformanceIndicator(targetAchievement, 'targetAchievement').color}`}>
-                {(() => {
-                  const { Icon } = getPerformanceIndicator(targetAchievement, 'targetAchievement')
-                  return <Icon className="w-5 h-5 mr-1" />
-                })()}
-                {targetAchievement}%
-              </div>
-              <div className="text-sm text-gray-600">Target Achievement</div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div 
-                  className={`h-2 rounded-full ${
-                    targetAchievement >= 100 ? 'bg-green-500' : 
-                    targetAchievement >= 90 ? 'bg-blue-500' : 
-                    targetAchievement >= 80 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${Math.min(targetAchievement, 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Basic Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Calendar className="mr-2 h-5 w-5 text-blue-600" />
-              Basic Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Date</label>
-                <div className="text-sm text-gray-900">{new Date(entry.date).toLocaleDateString()}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Production Line</label>
-                <Badge variant="outline" className="bg-blue-50 text-blue-700">{entry.line}</Badge>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Shift</label>
-                <div className="text-sm text-gray-900">{entry.shift}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Model</label>
-                <div className="text-sm text-gray-900">{entry.model}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Team Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="mr-2 h-5 w-5 text-green-600" />
-              Team Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Team Leader</label>
-                <div className="text-sm text-gray-900">{entry.teamLeader}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Shift InCharge</label>
-                <div className="text-sm text-gray-900">{entry.shiftInCharge}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Number of Operators</label>
-                <div className="text-sm text-gray-900">{entry.numOfOperators}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Submitted By</label>
-                <div className="text-sm text-gray-900">{entry.submittedBy.name}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Production Data */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="mr-2 h-5 w-5 text-purple-600" />
-              Production Data
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Available Time</label>
-                <div className="text-sm text-gray-900">{entry.availableTime} minutes</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Line Capacity</label>
-                <div className="text-sm text-gray-900">{entry.lineCapacity} units/hr</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">PPC Target</label>
-                <div className="text-sm text-gray-900">{entry.ppcTarget.toLocaleString()}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Loss Time</label>
-                <div className="text-sm text-gray-900">{entry.lossTime} minutes</div>
-              </div>
-            </div>
-            
-            <Separator />
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-green-50 rounded-lg">
-                <label className="text-sm font-medium text-green-800">Good Parts</label>
-                <div className="text-lg font-bold text-green-600">{entry.goodParts.toLocaleString()}</div>
-              </div>
-              <div className="p-3 bg-red-50 rounded-lg">
-                <label className="text-sm font-medium text-red-800">Rejects</label>
-                <div className="text-lg font-bold text-red-600">{entry.rejects.toLocaleString()}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Problem Analysis */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <AlertTriangle className="mr-2 h-5 w-5 text-orange-600" />
-              Problem Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Problem Head</label>
-                <div className="text-sm text-gray-900">{entry.problemHead}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Description</label>
-                <div className="text-sm text-gray-900">{entry.description}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Responsibility</label>
-                <Badge variant="outline" className="bg-orange-50 text-orange-700">{entry.responsibility}</Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Basic Information */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 text-sm">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Date</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Line</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Shift</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Model</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Team Leader</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Shift InCharge</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Production Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-gray-300 px-4 py-3 font-normal">
+                {new Date(entry.date).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant="outline">{entry.line}</Badge>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant="outline">{entry.shift}</Badge>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant="outline">{entry.model}</Badge>
+              </td>
+              <td className="border border-gray-300 px-4 py-3 font-medium">
+                {entry.teamLeader}
+              </td>
+              <td className="border border-gray-300 px-4 py-3 font-medium">
+                {entry.shiftInCharge}
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant={entry.productionType === 'Sets' ? 'default' : 'secondary'}>
+                  {entry.productionType || 'Single'}
+                </Badge>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+
+      {/* Production Metrics */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 text-sm">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Available Time</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Line Capacity</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">PPC Target</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Good Parts</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Rejects</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Loss Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-gray-300 px-4 py-3">
+                <span className="font-medium">{entry.availableTime}</span>
+                <span className="text-gray-500 ml-1">min</span>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <span className="font-medium">{entry.lineCapacity}</span>
+                <span className="text-gray-500 ml-1">u/hr</span>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <span className="text-lg font-semibold">
+                  {entry.ppcTarget.toLocaleString()}
+                </span>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <span className="text-lg font-semibold text-green-600">
+                  {entry.goodParts.toLocaleString()}
+                </span>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <span className="text-lg font-semibold text-red-600">
+                  {entry.rejects.toLocaleString()}
+                </span>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <span className="text-lg font-semibold">
+                  {entry.lossTime}
+                </span>
+                <span className="text-gray-500 ml-1">min</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Problem Analysis */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 text-sm">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Problem Head</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Description</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Responsibility</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Defect Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant="outline">{entry.problemHead}</Badge>
+              </td>
+              <td className="border border-gray-300 px-4 py-3 font-medium">
+                {entry.description}
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant="outline">{entry.responsibility}</Badge>
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <Badge variant={entry.defectType === 'New' ? 'destructive' : 'secondary'}>
+                  {entry.defectType || 'Repeat'} Defect
+                </Badge>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Operators - Vertical List */}
+      {entry.operatorNames && entry.operatorNames.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-sm font-bold">
+            Operators ({entry.operatorNames.filter(name => name.trim()).length})
+          </Label>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-300 text-sm">
+              <thead>
+                <tr>
+                  <th className="border border-gray-300 px-3 py-2 text-left font-bold w-16">#</th>
+                  <th className="border border-gray-300 px-3 py-2 text-left font-bold">Operator Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entry.operatorNames.filter(name => name.trim()).map((name, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-300 px-3 py-2 text-center font-medium">
+                      {index + 1}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 font-medium">
+                      {name}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* New Defect Description */}
+      {entry.defectType === 'New' && entry.newDefectDescription && (
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">New Defect Description</Label>
+          <div className="border border-gray-300 p-4 rounded">
+            <div className="font-medium">{entry.newDefectDescription}</div>
+          </div>
+        </div>
+      )}
 
       {/* Rejection Details */}
       {(entry.rejects > 0 || entry.rejectionPhenomena) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <XCircle className="mr-2 h-5 w-5 text-red-600" />
-              Rejection Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Rejection Phenomena</label>
-                <div className="text-sm text-gray-900">{entry.rejectionPhenomena || 'Not specified'}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Root Cause</label>
-                <div className="text-sm text-gray-900">{entry.rejectionCause || 'Not specified'}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Corrective Action</label>
-                <div className="text-sm text-gray-900">{entry.rejectionCorrectiveAction || 'Not specified'}</div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Rejection Count</label>
-                <div className="text-sm text-gray-900">{entry.rejectionCount || 0}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Approval Section */}
-      {showActions && entry.status === 'PENDING' && onApprove && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <User className="mr-2 h-5 w-5 text-blue-600" />
-              Approval Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex justify-center space-x-4">
-              <Button
-                onClick={() => onApprove(entry.id, 'APPROVED')}
-                className="bg-green-600 hover:bg-green-700 min-w-[120px]"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Approve Entry
-              </Button>
-              <Button
-                onClick={() => onApprove(entry.id, 'REJECTED')}
-                variant="destructive"
-                className="min-w-[120px]"
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Reject Entry
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Rejection Details</Label>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-300 text-sm">
+              <thead>
+                <tr>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold">Rejection Phenomena</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold">Root Cause</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold">Corrective Action</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-bold">Rejection Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border border-gray-300 px-4 py-3 font-medium">
+                    {entry.rejectionPhenomena || 'Not specified'}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3 font-medium">
+                    {entry.rejectionCause || 'Not specified'}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3 font-medium">
+                    {entry.rejectionCorrectiveAction || 'Not specified'}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <span className="text-lg font-bold text-red-600">
+                      {entry.rejectionCount || 0}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Status Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Info className="mr-2 h-5 w-5 text-gray-600" />
-            Status Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-600">Current Status</label>
-              <div className="mt-1">{getStatusBadge(entry.status)}</div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-600">Last Updated</label>
-              <div className="text-sm text-gray-900">{new Date(entry.updatedAt).toLocaleString()}</div>
-            </div>
-            {entry.approvedBy && (
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 text-sm">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Status</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Submitted By</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Submission Date</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Reviewed By</th>
+              <th className="border border-gray-300 px-4 py-2 text-left font-bold">Last Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-gray-300 px-4 py-3">
+                {getStatusBadge(entry.status)}
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                <div>
+                  <div className="font-medium">{entry.submittedBy.name}</div>
+                  <div className="text-xs text-gray-500">{entry.submittedBy.email}</div>
+                </div>
+              </td>
+              <td className="border border-gray-300 px-4 py-3 font-medium">
+                {new Date(entry.createdAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </td>
+              <td className="border border-gray-300 px-4 py-3">
+                {entry.approvedBy ? (
+                  <div>
+                    <div className="font-medium">{entry.approvedBy.name}</div>
+                    <div className="text-xs text-gray-500">{entry.approvedBy.email}</div>
+                  </div>
+                ) : (
+                  <span className="text-gray-400 italic">Pending</span>
+                )}
+              </td>
+              <td className="border border-gray-300 px-4 py-3 font-medium">
+                {new Date(entry.updatedAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Rejection Reason */}
+      {entry.status === 'REJECTED' && entry.rejectionReason && (
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Supervisor Feedback</Label>
+          <div className="border border-red-300 p-4 rounded">
+            <div className="flex items-start">
+              <AlertTriangle className="h-5 w-5 text-red-500 mr-3 mt-0.5" />
               <div>
-                <label className="text-sm font-medium text-gray-600">
-                  {entry.status === 'APPROVED' ? 'Approved By' : 'Reviewed By'}
-                </label>
-                <div className="text-sm text-gray-900">{entry.approvedBy.name}</div>
+                <div className="font-medium text-red-800 mb-2">Rejection Reason:</div>
+                <div className="text-gray-900 leading-relaxed">{entry.rejectionReason}</div>
               </div>
-            )}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+            <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 text-sm">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Total Production</th>
+              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Efficiency</th>
+              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Reject Rate</th>
+              <th className="border border-gray-300 px-6 py-3 text-center font-bold">Target Achievement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-gray-300 px-6 py-6 text-center">
+                <div className="text-2xl font-bold text-gray-900 mb-1">{totalProduction.toLocaleString()}</div>
+                <div className="text-sm text-gray-600">Units</div>
+              </td>
+              <td className="border border-gray-300 px-6 py-6 text-center">
+                <div className={`text-2xl font-bold mb-1 flex items-center justify-center ${getPerformanceIndicator(efficiency, 'efficiency').color}`}>
+                  {(() => {
+                    const { Icon } = getPerformanceIndicator(efficiency, 'efficiency')
+                    return <Icon className="w-5 h-5 mr-2" />
+                  })()}
+                  {efficiency}%
+                </div>
+                <div className="text-xs text-gray-600">Good / Total</div>
+              </td>
+              <td className="border border-gray-300 px-6 py-6 text-center">
+                <div className={`text-2xl font-bold mb-1 flex items-center justify-center ${getPerformanceIndicator(rejectRate, 'rejectRate').color}`}>
+                  {(() => {
+                    const { Icon } = getPerformanceIndicator(rejectRate, 'rejectRate')
+                    return <Icon className="w-5 h-5 mr-2" />
+                  })()}
+                  {rejectRate}%
+                </div>
+                <div className="text-xs text-gray-600">Rejects / Total</div>
+              </td>
+              <td className="border border-gray-300 px-6 py-6 text-center">
+                <div className={`text-2xl font-bold mb-1 flex items-center justify-center ${getPerformanceIndicator(targetAchievement, 'targetAchievement').color}`}>
+                  {(() => {
+                    const { Icon } = getPerformanceIndicator(targetAchievement, 'targetAchievement')
+                    return <Icon className="w-5 h-5 mr-2" />
+                  })()}
+                  {targetAchievement}%
+                </div>
+                <div className="text-xs text-gray-600">Actual / Target</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+
+      {/* Approval Actions */}
+      {showActions && entry.status === 'PENDING' && onApprove && userRole === 'SUPERVISOR' && (
+        <Card className="shadow-lg border-2 border-gray-300">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center text-xl">
+              <User className="mr-3 h-6 w-6" />
+              Supervisor Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="border border-gray-200 rounded p-6">
+              <div className="text-center space-y-4">
+                <div className="text-lg font-medium text-gray-900 mb-4">
+                  Review this production entry and take appropriate action
+                </div>
+                <div className="flex justify-center space-x-4">
+                  <Button
+                    
+                    onClick={handleApprove}
+                    className="px-8 py-3 text-lg font-semibold min-w-[150px] bg-green-600 hover:bg-green-700"
+                    
+                  >
+                    <CheckCircle className="mr-2 h-5 w-5" />
+                    Approve Entry
+                  </Button>
+                  <Button
+                    onClick={handleRejectClick}
+                    variant="destructive"
+                    className="px-8 py-3 text-lg font-semibold min-w-[150px]"
+                  >
+                    <XCircle className="mr-2 h-5 w-5" />
+                    Reject Entry
+                  </Button>
+                </div>
+                <div className="text-sm text-gray-500 mt-4">
+                  Approved entries will be saved to the database. Rejected entries will be sent back to the team leader for revision.
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      
+
+      {/* Rejection Dialog */}
+      <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-700">
+              <XCircle className="mr-2 h-5 w-5" />
+              Reject Entry
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a detailed reason for rejecting this production entry. The team leader will see this feedback and can use it to make corrections.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rejectionReason">Rejection Reason *</Label>
+              <Textarea
+                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Enter detailed reason for rejection..."
+                className="mt-1 min-h-[120px]"
+                required
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Be specific about what needs to be corrected or improved.
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={handleRejectCancel} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleRejectConfirm}
+                disabled={!rejectionReason.trim() || submitting}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Rejecting...
+                  </>
+                ) : (
+                  'Reject Entry'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

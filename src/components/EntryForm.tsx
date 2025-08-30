@@ -8,53 +8,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { 
-  Factory, 
-  CheckCircle, 
+import { Switch } from '@/components/ui/switch'
+import { Entry, FormData, FormErrors, Parameters } from '@/types'
+import {
+  Factory,
+  CheckCircle,
   AlertTriangle,
   Loader2,
-  Calendar,
-  Users,
-  Target,
-  XCircle,
-  Info,
-  BarChart3,
-  Zap
+  Plus,
+  Minus,
+  Save,
+  RotateCcw,
+  X
 } from 'lucide-react'
 
-interface Parameters {
-  [key: string]: string[]
+interface EntryFormProps {
+  onSuccess?: () => void
+  onClose?: () => void
+  editingEntry?: Entry | null
+  isEditing?: boolean
+  showCloseButton?: boolean
 }
 
-interface FormData {
-  date: string
-  line: string
-  shift: string
-  teamLeader: string
-  shiftInCharge: string
-  model: string
-  numOfOperators: number
-  availableTime: string
-  lineCapacity: string
-  ppcTarget: number
-  goodParts: number
-  rejects: number
-  problemHead: string
-  description: string
-  lossTime: number
-  responsibility: string
-  rejectionPhenomena: string
-  rejectionCause: string
-  rejectionCorrectiveAction: string
-  rejectionCount: number
-}
-
-interface FormErrors {
-  [key: string]: string
-}
-
-export default function EntryForm({ onSuccess }: { onSuccess?: () => void }) {
+export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing = false, showCloseButton = false }: EntryFormProps) {
   const [parameters, setParameters] = useState<Parameters>({})
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
@@ -67,25 +43,61 @@ export default function EntryForm({ onSuccess }: { onSuccess?: () => void }) {
     teamLeader: '',
     shiftInCharge: '',
     model: '',
-    numOfOperators: 0,
+    operatorNames: [''],
     availableTime: '',
     lineCapacity: '',
-    ppcTarget: 0,
-    goodParts: 0,
-    rejects: 0,
+    ppcTarget: '',
+    goodParts: '',
+    rejects: '',
     problemHead: '',
     description: '',
-    lossTime: 0,
+    lossTime: '',
     responsibility: '',
+    productionType: 'Single',
+    defectType: 'Repeat',
+    newDefectDescription: '',
     rejectionPhenomena: '',
     rejectionCause: '',
     rejectionCorrectiveAction: '',
-    rejectionCount: 0
+    rejectionCount: ''
   })
 
   useEffect(() => {
     fetchParameters()
-  }, [])
+    if (isEditing && editingEntry) {
+      populateFormForEdit()
+    }
+  }, [isEditing, editingEntry])
+
+  const populateFormForEdit = () => {
+    if (editingEntry) {
+      setFormData({
+        date: editingEntry.date.split('T')[0],
+        line: editingEntry.line,
+        shift: editingEntry.shift,
+        teamLeader: editingEntry.teamLeader,
+        shiftInCharge: editingEntry.shiftInCharge,
+        model: editingEntry.model,
+        operatorNames: editingEntry.operatorNames || [''],
+        availableTime: editingEntry.availableTime,
+        lineCapacity: editingEntry.lineCapacity,
+        ppcTarget: editingEntry.ppcTarget?.toString() || '',
+        goodParts: editingEntry.goodParts?.toString() || '',
+        rejects: editingEntry.rejects?.toString() || '',
+        problemHead: editingEntry.problemHead,
+        description: editingEntry.description,
+        lossTime: editingEntry.lossTime?.toString() || '',
+        responsibility: editingEntry.responsibility,
+        productionType: editingEntry.productionType || 'Single',
+        defectType: editingEntry.defectType || 'Repeat',
+        newDefectDescription: editingEntry.newDefectDescription || '',
+        rejectionPhenomena: editingEntry.rejectionPhenomena || '',
+        rejectionCause: editingEntry.rejectionCause || '',
+        rejectionCorrectiveAction: editingEntry.rejectionCorrectiveAction || '',
+        rejectionCount: editingEntry.rejectionCount?.toString() || ''
+      })
+    }
+  }
 
   const fetchParameters = async () => {
     try {
@@ -97,729 +109,742 @@ export default function EntryForm({ onSuccess }: { onSuccess?: () => void }) {
     }
   }
 
+  const addOperator = () => {
+    if (formData.operatorNames.length < 8) {
+      setFormData(prev => ({
+        ...prev,
+        operatorNames: [...prev.operatorNames, '']
+      }))
+    }
+  }
+
+  const removeOperator = (index: number) => {
+    if (formData.operatorNames.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        operatorNames: prev.operatorNames.filter((_, i) => i !== index)
+      }))
+    }
+  }
+
+  const updateOperatorName = (index: number, name: string) => {
+    setFormData(prev => ({
+      ...prev,
+      operatorNames: prev.operatorNames.map((op, i) => i === index ? name : op)
+    }))
+  }
+
+  const parseNumber = (value: string): number => {
+    if (value === '') return 0
+    const parsed = parseInt(value)
+    return isNaN(parsed) ? 0 : parsed
+  }
+
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
 
     // Required field validation
-    if (!formData.date) newErrors.date = 'Date is required'
-    if (!formData.line) newErrors.line = 'Production line is required'
-    if (!formData.shift) newErrors.shift = 'Shift is required'
-    if (!formData.teamLeader) newErrors.teamLeader = 'Team leader is required'
-    if (!formData.shiftInCharge) newErrors.shiftInCharge = 'Shift in-charge is required'
-    if (!formData.model) newErrors.model = 'Model is required'
-    if (!formData.availableTime) newErrors.availableTime = 'Available time is required'
-    if (!formData.lineCapacity) newErrors.lineCapacity = 'Line capacity is required'
-    if (!formData.problemHead) newErrors.problemHead = 'Problem head is required'
-    if (!formData.description) newErrors.description = 'Description is required'
-    if (!formData.responsibility) newErrors.responsibility = 'Responsibility is required'
+    if (!formData.date) newErrors.date = 'Required'
+    if (!formData.line) newErrors.line = 'Required'
+    if (!formData.shift) newErrors.shift = 'Required'
+    if (!formData.teamLeader) newErrors.teamLeader = 'Required'
+    if (!formData.shiftInCharge) newErrors.shiftInCharge = 'Required'
+    if (!formData.model) newErrors.model = 'Required'
+    if (!formData.availableTime) newErrors.availableTime = 'Required'
+    if (!formData.lineCapacity) newErrors.lineCapacity = 'Required'
+    if (!formData.problemHead) newErrors.problemHead = 'Required'
+    if (!formData.description) newErrors.description = 'Required'
+    if (!formData.responsibility) newErrors.responsibility = 'Required'
+
+    // Operator validation
+    const validOperators = formData.operatorNames.filter(name => name.trim() !== '')
+    if (validOperators.length === 0) newErrors.operators = 'At least one operator name is required'
 
     // Numeric validation
-    if (formData.numOfOperators <= 0) newErrors.numOfOperators = 'Must be greater than 0'
-    if (formData.ppcTarget <= 0) newErrors.ppcTarget = 'Must be greater than 0'
-    if (formData.goodParts < 0) newErrors.goodParts = 'Cannot be negative'
-    if (formData.rejects < 0) newErrors.rejects = 'Cannot be negative'
-    if (formData.lossTime < 0) newErrors.lossTime = 'Cannot be negative'
+    const ppcTarget = parseNumber(formData.ppcTarget)
+    const goodParts = parseNumber(formData.goodParts)
+    const rejects = parseNumber(formData.rejects)
+    const lossTime = parseNumber(formData.lossTime)
+    const rejectionCount = parseNumber(formData.rejectionCount)
+
+    if (formData.ppcTarget !== '' && ppcTarget < 0) newErrors.ppcTarget = 'Cannot be negative'
+    if (formData.goodParts !== '' && goodParts < 0) newErrors.goodParts = 'Cannot be negative'
+    if (formData.rejects !== '' && rejects < 0) newErrors.rejects = 'Cannot be negative'
+    if (formData.lossTime !== '' && lossTime < 0) newErrors.lossTime = 'Cannot be negative'
 
     // Business logic validation
-    // Business logic validation
-   const totalParts = formData.goodParts + formData.rejects
-   if (totalParts === 0) newErrors.goodParts = 'Total production must be greater than 0'
-   
-   if (formData.rejects > 0) {
-     if (!formData.rejectionPhenomena.trim()) newErrors.rejectionPhenomena = 'Required when rejects > 0'
-     if (!formData.rejectionCause.trim()) newErrors.rejectionCause = 'Required when rejects > 0'
-     if (!formData.rejectionCorrectiveAction.trim()) newErrors.rejectionCorrectiveAction = 'Required when rejects > 0'
-     if (formData.rejectionCount <= 0) newErrors.rejectionCount = 'Must be greater than 0 when rejects exist'
-     if (formData.rejectionCount > formData.rejects) newErrors.rejectionCount = 'Cannot exceed total rejects'
-   }
+    const totalParts = goodParts + rejects
+    if (formData.goodParts !== '' && formData.rejects !== '' && totalParts === 0) {
+      newErrors.goodParts = 'Total production must be > 0'
+    }
 
-   // Date validation
-   const selectedDate = new Date(formData.date)
-   const today = new Date()
-   today.setHours(23, 59, 59, 999) // End of today
-   if (selectedDate > today) {
-     newErrors.date = 'Date cannot be in the future'
-   }
+    if (rejects > 0) {
+      if (!formData.rejectionPhenomena.trim()) newErrors.rejectionPhenomena = 'Required when rejects > 0'
+      if (!formData.rejectionCause.trim()) newErrors.rejectionCause = 'Required when rejects > 0'
+      if (!formData.rejectionCorrectiveAction.trim()) newErrors.rejectionCorrectiveAction = 'Required when rejects > 0'
+      if (formData.rejectionCount === '' || rejectionCount <= 0) newErrors.rejectionCount = 'Must be > 0 when rejects exist'
+      if (rejectionCount > rejects) newErrors.rejectionCount = 'Cannot exceed total rejects'
+    }
 
-   setErrors(newErrors)
-   return Object.keys(newErrors).length === 0
- }
+    // New defect validation
+    if (formData.defectType === 'New' && !formData.newDefectDescription.trim()) {
+      newErrors.newDefectDescription = 'Required when defect type is New'
+    }
 
- const updateField = (field: keyof FormData, value: string | number) => {
-   setFormData(prev => ({ ...prev, [field]: value }))
-   // Clear error for this field when user starts typing
-   if (errors[field]) {
-     setErrors(prev => ({ ...prev, [field]: '' }))
-   }
- }
+    // Date validation
+    const selectedDate = new Date(formData.date)
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    if (selectedDate > today) {
+      newErrors.date = 'Cannot be in future'
+    }
 
- const handleSubmit = async (e: React.FormEvent) => {
-   e.preventDefault()
-   
-   if (!validateForm()) {
-     setSubmitStatus('error')
-     return
-   }
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
-   setLoading(true)
-   setSubmitStatus('idle')
+  const updateField = (field: keyof FormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }))
+    }
+  }
 
-   try {
-     const response = await fetch('/api/entries', {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify(formData)
-     })
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-     if (response.ok) {
-       setSubmitStatus('success')
-       resetForm()
-       onSuccess?.()
-     } else {
-       const errorData = await response.json()
-       setSubmitStatus('error')
-       if (errorData.error) {
-         setErrors({ general: errorData.error })
-       }
-     }
-   } catch (error) {
-     setSubmitStatus('error')
-     setErrors({ general: 'Network error occurred. Please try again.' })
-   } finally {
-     setLoading(false)
-   }
- }
+    if (!validateForm()) {
+      setSubmitStatus('error')
+      return
+    }
 
- const resetForm = () => {
-   setFormData({
-     date: new Date().toISOString().split('T')[0],
-     line: '',
-     shift: '',
-     teamLeader: '',
-     shiftInCharge: '',
-     model: '',
-     numOfOperators: 0,
-     availableTime: '',
-     lineCapacity: '',
-     ppcTarget: 0,
-     goodParts: 0,
-     rejects: 0,
-     problemHead: '',
-     description: '',
-     lossTime: 0,
-     responsibility: '',
-     rejectionPhenomena: '',
-     rejectionCause: '',
-     rejectionCorrectiveAction: '',
-     rejectionCount: 0
-   })
-   setErrors({})
-   setSubmitStatus('idle')
- }
+    setLoading(true)
+    setSubmitStatus('idle')
 
- const getFieldError = (field: string) => errors[field]
- const hasError = (field: string) => !!errors[field]
+    try {
+      const submitData = {
+        ...formData,
+        operatorNames: formData.operatorNames.filter(name => name.trim() !== ''),
+        ppcTarget: parseNumber(formData.ppcTarget),
+        goodParts: parseNumber(formData.goodParts),
+        rejects: parseNumber(formData.rejects),
+        lossTime: parseNumber(formData.lossTime),
+        rejectionCount: parseNumber(formData.rejectionCount)
+      }
 
- // Calculate real-time metrics
- const totalProduction = formData.goodParts + formData.rejects
- const efficiency = totalProduction > 0 ? Math.round((formData.goodParts / totalProduction) * 100) : 0
- const rejectRate = totalProduction > 0 ? Math.round((formData.rejects / totalProduction) * 100) : 0
- const targetAchievement = formData.ppcTarget > 0 ? Math.round((totalProduction / formData.ppcTarget) * 100) : 0
+      const url = isEditing ? `/api/entries/${editingEntry?.id}` : '/api/entries'
+      const method = isEditing ? 'PUT' : 'POST'
 
- return (
-   <div className="max-w-7xl mx-auto">
-     <Card className="shadow-xl border-0 bg-white">
-       <CardHeader className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-b">
-         <div className="flex items-center justify-between">
-           <div className="flex items-center space-x-4">
-             <div className="h-12 w-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-               <Factory className="h-6 w-6 text-white" />
-             </div>
-             <div>
-               <CardTitle className="text-3xl font-bold text-gray-900">Production Data Entry</CardTitle>
-               <CardDescription className="text-lg text-gray-600 mt-1">
-                 Complete the form below to submit production data for supervisor approval
-               </CardDescription>
-             </div>
-           </div>
-           <Badge variant="outline" className="bg-white/80 text-blue-700 border-blue-200 px-4 py-2">
-             <Info className="h-4 w-4 mr-2" />
-             All fields required unless noted
-           </Badge>
-         </div>
-       </CardHeader>
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submitData)
+      })
 
-       <CardContent className="p-8">
-         {/* Status Messages */}
-         {submitStatus === 'success' && (
-           <Alert className="mb-8 border-green-200 bg-green-50 shadow-sm">
-             <CheckCircle className="h-5 w-5 text-green-600" />
-             <AlertDescription className="text-green-800 font-medium">
-               🎉 Entry submitted successfully! Your production data is now pending supervisor approval.
-             </AlertDescription>
-           </Alert>
-         )}
+      if (response.ok) {
+        setSubmitStatus('success')
+        if (!isEditing) resetForm()
+        onSuccess?.()
+      } else {
+        const errorData = await response.json()
+        setSubmitStatus('error')
+        if (errorData.error) {
+          setErrors({ general: errorData.error })
+        }
+      }
+    } catch (error) {
+      setSubmitStatus('error')
+      setErrors({ general: 'Network error occurred. Please try again.' })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-         {(submitStatus === 'error' && Object.keys(errors).length > 0) && (
-           <Alert className="mb-8 border-red-200 bg-red-50 shadow-sm">
-             <AlertTriangle className="h-5 w-5 text-red-600" />
-             <AlertDescription className="text-red-800 font-medium">
-               Please correct the highlighted errors below before submitting.
-             </AlertDescription>
-           </Alert>
-         )}
+  const resetForm = () => {
+    setFormData({
+      date: new Date().toISOString().split('T')[0],
+      line: '',
+      shift: '',
+      teamLeader: '',
+      shiftInCharge: '',
+      model: '',
+      operatorNames: [''],
+      availableTime: '',
+      lineCapacity: '',
+      ppcTarget: '',
+      goodParts: '',
+      rejects: '',
+      problemHead: '',
+      description: '',
+      lossTime: '',
+      responsibility: '',
+      productionType: 'Single',
+      defectType: 'Repeat',
+      newDefectDescription: '',
+      rejectionPhenomena: '',
+      rejectionCause: '',
+      rejectionCorrectiveAction: '',
+      rejectionCount: ''
+    })
+    setErrors({})
+    setSubmitStatus('idle')
+  }
 
-         {/* Real-time Analytics */}
-         {totalProduction > 0 && (
-           <Card className="mb-8 bg-gradient-to-r from-gray-50 to-blue-50 border-blue-200">
-             <CardHeader className="pb-4">
-               <CardTitle className="flex items-center text-lg">
-                 <BarChart3 className="h-5 w-5 text-blue-600 mr-2" />
-                 Live Production Metrics
-               </CardTitle>
-             </CardHeader>
-             <CardContent>
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                 <div className="bg-white p-4 rounded-lg shadow-sm border">
-                   <div className="flex items-center justify-between mb-2">
-                     <span className="text-sm font-medium text-gray-600">Total Production</span>
-                     <Zap className="h-4 w-4 text-blue-500" />
-                   </div>
-                   <div className="text-2xl font-bold text-blue-600">{totalProduction.toLocaleString()}</div>
-                 </div>
-                 <div className="bg-white p-4 rounded-lg shadow-sm border">
-                   <div className="flex items-center justify-between mb-2">
-                     <span className="text-sm font-medium text-gray-600">Efficiency</span>
-                     <CheckCircle className="h-4 w-4 text-green-500" />
-                   </div>
-                   <div className="text-2xl font-bold text-green-600">{efficiency}%</div>
-                   <div className="w-full bg-gray-200 rounded-full h-1 mt-2">
-                     <div 
-                       className="bg-green-500 h-1 rounded-full transition-all duration-500" 
-                       style={{ width: `${efficiency}%` }}
-                     />
-                   </div>
-                 </div>
-                 <div className="bg-white p-4 rounded-lg shadow-sm border">
-                   <div className="flex items-center justify-between mb-2">
-                     <span className="text-sm font-medium text-gray-600">Reject Rate</span>
-                     <XCircle className="h-4 w-4 text-red-500" />
-                   </div>
-                   <div className="text-2xl font-bold text-red-600">{rejectRate}%</div>
-                   <div className="w-full bg-gray-200 rounded-full h-1 mt-2">
-                     <div 
-                       className="bg-red-500 h-1 rounded-full transition-all duration-500" 
-                       style={{ width: `${rejectRate}%` }}
-                     />
-                   </div>
-                 </div>
-                 <div className="bg-white p-4 rounded-lg shadow-sm border">
-                   <div className="flex items-center justify-between mb-2">
-                     <span className="text-sm font-medium text-gray-600">Target Achievement</span>
-                     <Target className="h-4 w-4 text-purple-500" />
-                   </div>
-                   <div className="text-2xl font-bold text-purple-600">{targetAchievement}%</div>
-                   <div className="w-full bg-gray-200 rounded-full h-1 mt-2">
-                     <div 
-                       className="bg-purple-500 h-1 rounded-full transition-all duration-500" 
-                       style={{ width: `${Math.min(targetAchievement, 100)}%` }}
-                     />
-                   </div>
-                 </div>
-               </div>
-             </CardContent>
-           </Card>
-         )}
+  const hasError = (field: string) => !!errors[field]
 
-         <form onSubmit={handleSubmit} className="space-y-8">
-           {/* Section 1: Basic Information */}
-           <div className="space-y-6">
-             <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
-               <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                 <Calendar className="h-4 w-4 text-blue-600" />
-               </div>
-               <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
-             </div>
+  return (
+    <div className="max-w-full mx-auto">
+      <Card className="shadow-lg border">
+        <CardHeader className="border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 rounded flex items-center justify-center border">
+                <Factory className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-bold">
+                  {isEditing ? 'Edit Production Entry' : 'Production Data Entry'}
+                </CardTitle>
+                <CardDescription>
+                  {isEditing ? 'Modify production data details' : 'Enter production data for supervisor approval'}
+                </CardDescription>
+              </div>
+            </div>
+            {showCloseButton && onClose && (
+              <Button variant="outline" size="sm" onClick={onClose}>
+                <X className="h-4 w-4 mr-2" />
+                Close
+              </Button>
+            )}
+          </div>
+        </CardHeader>
 
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               <div className="space-y-2">
-                 <Label htmlFor="date" className="text-sm font-semibold text-gray-700">
-                   Production Date *
-                 </Label>
-                 <Input
-                   id="date"
-                   type="date"
-                   value={formData.date}
-                   onChange={(e) => updateField('date', e.target.value)}
-                   max={new Date().toISOString().split('T')[0]}
-                   className={`h-11 ${hasError('date') ? 'border-red-500 focus:border-red-500 bg-red-50' : 'border-gray-300 focus:border-blue-500'}`}
-                 />
-                 {hasError('date') && (
-                   <p className="text-sm text-red-600 flex items-center mt-1">
-                     <AlertTriangle className="h-3 w-3 mr-1" />
-                     {getFieldError('date')}
-                   </p>
-                 )}
-               </div>
+        <CardContent className="p-6">
+          {/* Status Messages */}
+          {submitStatus === 'success' && (
+            <Alert className="mb-6 border-green-300">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                {isEditing ? 'Entry updated successfully!' : 'Entry submitted successfully! Pending supervisor approval.'}
+              </AlertDescription>
+            </Alert>
+          )}
 
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Production Line *</Label>
-                 <Select value={formData.line} onValueChange={(value) => updateField('line', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('line') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select production line" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.LINE?.map((line) => (
-                       <SelectItem key={line} value={line}>
-                         <div className="flex items-center">
-                           <Factory className="h-4 w-4 mr-2 text-blue-500" />
-                           {line}
-                         </div>
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('line') && (
-                   <p className="text-sm text-red-600 flex items-center mt-1">
-                     <AlertTriangle className="h-3 w-3 mr-1" />
-                     {getFieldError('line')}
-                   </p>
-                 )}
-               </div>
+          {(submitStatus === 'error' && Object.keys(errors).length > 0) && (
+            <Alert className="mb-6 border-red-300">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Please correct the errors highlighted in the form below.
+              </AlertDescription>
+            </Alert>
+          )}
 
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Shift *</Label>
-                 <Select value={formData.shift} onValueChange={(value) => updateField('shift', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('shift') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select shift" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.SHIFT?.map((shift) => (
-                       <SelectItem key={shift} value={shift}>{shift}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('shift') && (
-                   <p className="text-sm text-red-600 flex items-center mt-1">
-                     <AlertTriangle className="h-3 w-3 mr-1" />
-                     {getFieldError('shift')}
-                   </p>
-                 )}
-               </div>
-             </div>
-           </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Basic Information */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <thead>
+                  <tr>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Date *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Line *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Shift *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Model *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Team Leader *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Shift InCharge *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Production Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => updateField('date', e.target.value)}
+                        className={`h-8 text-xs ${hasError('date') ? 'border-red-500' : 'border-gray-300'}`}
+                        max={new Date().toISOString().split('T')[0]}
+                      />
+                      {errors.date && <div className="text-xs text-red-600 mt-1">{errors.date}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.line} onValueChange={(value) => updateField('line', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('line') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.LINE?.map((line) => (
+                            <SelectItem key={line} value={line}>{line}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.line && <div className="text-xs text-red-600 mt-1">{errors.line}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.shift} onValueChange={(value) => updateField('shift', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('shift') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.SHIFT?.map((shift) => (
+                            <SelectItem key={shift} value={shift}>{shift}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.shift && <div className="text-xs text-red-600 mt-1">{errors.shift}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.model} onValueChange={(value) => updateField('model', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('model') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.MODEL?.map((model) => (
+                            <SelectItem key={model} value={model}>{model}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.model && <div className="text-xs text-red-600 mt-1">{errors.model}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.teamLeader} onValueChange={(value) => updateField('teamLeader', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('teamLeader') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.TEAM_LEADER?.map((leader) => (
+                            <SelectItem key={leader} value={leader}>{leader}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.teamLeader && <div className="text-xs text-red-600 mt-1">{errors.teamLeader}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.shiftInCharge} onValueChange={(value) => updateField('shiftInCharge', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('shiftInCharge') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.SHIFT_INCHARGE?.map((incharge) => (
+                            <SelectItem key={incharge} value={incharge}>{incharge}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.shiftInCharge && <div className="text-xs text-red-600 mt-1">{errors.shiftInCharge}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          checked={formData.productionType === 'Sets'}
+                          onCheckedChange={(checked) => updateField('productionType', checked ? 'Sets' : 'Single')}
+                        />
+                        <span className="text-xs font-medium">{formData.productionType}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-           <Separator className="my-8" />
+            {/* Production Metrics */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <thead>
+                  <tr>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Available Time *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Line Capacity *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">PPC Target</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Good Parts</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejects</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Loss Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.availableTime} onValueChange={(value) => updateField('availableTime', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('availableTime') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.AVAILABLE_TIME?.map((time) => (
+                            <SelectItem key={time} value={time}>{time} min</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.availableTime && <div className="text-xs text-red-600 mt-1">{errors.availableTime}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.lineCapacity} onValueChange={(value) => updateField('lineCapacity', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('lineCapacity') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.LINE_CAPACITY?.map((capacity) => (
+                            <SelectItem key={capacity} value={capacity}>{capacity} u/hr</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.lineCapacity && <div className="text-xs text-red-600 mt-1">{errors.lineCapacity}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formData.ppcTarget}
+                        onChange={(e) => updateField('ppcTarget', e.target.value)}
+                        className={`h-8 text-xs ${hasError('ppcTarget') ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Target"
+                      />
+                      {errors.ppcTarget && <div className="text-xs text-red-600 mt-1">{errors.ppcTarget}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formData.goodParts}
+                        onChange={(e) => updateField('goodParts', e.target.value)}
+                        className={`h-8 text-xs ${hasError('goodParts') ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Good"
+                      />
+                      {errors.goodParts && <div className="text-xs text-red-600 mt-1">{errors.goodParts}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formData.rejects}
+                        onChange={(e) => updateField('rejects', e.target.value)}
+                        className={`h-8 text-xs ${hasError('rejects') ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Rejects"
+                      />
+                      {errors.rejects && <div className="text-xs text-red-600 mt-1">{errors.rejects}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formData.lossTime}
+                        onChange={(e) => updateField('lossTime', e.target.value)}
+                        className={`h-8 text-xs ${hasError('lossTime') ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Minutes"
+                      />
+                      {errors.lossTime && <div className="text-xs text-red-600 mt-1">{errors.lossTime}</div>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-           {/* Section 2: Team & Setup */}
-           <div className="space-y-6">
-             <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
-               <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
-                 <Users className="h-4 w-4 text-green-600" />
-               </div>
-               <h3 className="text-xl font-semibold text-gray-900">Team & Production Setup</h3>
-             </div>
+            {/* Problem Analysis with Defect Type */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <thead>
+                  <tr>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Problem Head *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Description *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Responsibility *</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Defect Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.problemHead} onValueChange={(value) => updateField('problemHead', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('problemHead') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select problem" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.PROBLEM_HEAD?.map((problem) => (
+                            <SelectItem key={problem} value={problem}>{problem}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.problemHead && <div className="text-xs text-red-600 mt-1">{errors.problemHead}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.description} onValueChange={(value) => updateField('description', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('description') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select description" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.DESCRIPTION?.map((desc) => (
+                            <SelectItem key={desc} value={desc}>{desc}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.description && <div className="text-xs text-red-600 mt-1">{errors.description}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <Select value={formData.responsibility} onValueChange={(value) => updateField('responsibility', value)}>
+                        <SelectTrigger className={`h-8 text-xs ${hasError('responsibility') ? 'border-red-500' : 'border-gray-300'}`}>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parameters.RESPONSIBILITY?.map((resp) => (
+                            <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.responsibility && <div className="text-xs text-red-600 mt-1">{errors.responsibility}</div>}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          checked={formData.defectType === 'New'}
+                          onCheckedChange={(checked) => updateField('defectType', checked ? 'New' : 'Repeat')}
+                        />
+                        <Badge variant={formData.defectType === 'New' ? 'destructive' : 'secondary'} className="text-xs">
+                          {formData.defectType}
+                        </Badge>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Team Leader *</Label>
-                 <Select value={formData.teamLeader} onValueChange={(value) => updateField('teamLeader', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('teamLeader') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select team leader" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.TEAM_LEADER?.map((leader) => (
-                       <SelectItem key={leader} value={leader}>{leader}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('teamLeader') && (
-                   <p className="text-sm text-red-600">{getFieldError('teamLeader')}</p>
-                 )}
-               </div>
+            {/* New Defect Description - Only show if New defect type */}
+            {formData.defectType === 'New' && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">New Defect Description *</Label>
+                <Input
+                  value={formData.newDefectDescription}
+                  onChange={(e) => updateField('newDefectDescription', e.target.value)}
+                  placeholder="Describe the new defect/problem in detail..."
+                  className={`h-8 text-xs ${hasError('newDefectDescription') ? 'border-red-500' : 'border-gray-300'}`}
+                />
+                {errors.newDefectDescription && <div className="text-xs text-red-600">{errors.newDefectDescription}</div>}
+              </div>
+            )}
 
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Shift InCharge *</Label>
-                 <Select value={formData.shiftInCharge} onValueChange={(value) => updateField('shiftInCharge', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('shiftInCharge') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select shift incharge" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.SHIFT_INCHARGE?.map((incharge) => (
-                       <SelectItem key={incharge} value={incharge}>{incharge}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('shiftInCharge') && (
-                   <p className="text-sm text-red-600">{getFieldError('shiftInCharge')}</p>
-                 )}
-               </div>
+            {/* Rejection Details - Only show if rejects > 0 */}
+            {parseNumber(formData.rejects) > 0 && (
+              <div className="space-y-4">
+                <Label className="text-sm font-semibold">Rejection Details</Label>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-sm">
+                    <thead>
+                      <tr>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Phenomena *</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Cause *</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Corrective Action *</th>
+                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Count *</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <Input
+                            value={formData.rejectionPhenomena}
+                            onChange={(e) => updateField('rejectionPhenomena', e.target.value)}
+                            placeholder="Describe phenomena"
+                            className={`h-8 text-xs ${hasError('rejectionPhenomena') ? 'border-red-500' : 'border-gray-300'}`}
+                          />
+                          {errors.rejectionPhenomena && <div className="text-xs text-red-600 mt-1">{errors.rejectionPhenomena}</div>}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <Input
+                            value={formData.rejectionCause}
+                            onChange={(e) => updateField('rejectionCause', e.target.value)}
+                            placeholder="Root cause"
+                            className={`h-8 text-xs ${hasError('rejectionCause') ? 'border-red-500' : 'border-gray-300'}`}
+                          />
+                          {errors.rejectionCause && <div className="text-xs text-red-600 mt-1">{errors.rejectionCause}</div>}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <Input
+                            value={formData.rejectionCorrectiveAction}
+                            onChange={(e) => updateField('rejectionCorrectiveAction', e.target.value)}
+                            placeholder="Corrective action"
+                            className={`h-8 text-xs ${hasError('rejectionCorrectiveAction') ? 'border-red-500' : 'border-gray-300'}`}
+                          />
+                          {errors.rejectionCorrectiveAction && <div className="text-xs text-red-600 mt-1">{errors.rejectionCorrectiveAction}</div>}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            max={parseNumber(formData.rejects)}
+                            value={formData.rejectionCount}
+                            onChange={(e) => updateField('rejectionCount', e.target.value)}
+                            placeholder="Count"
+                            className={`h-8 text-xs ${hasError('rejectionCount') ? 'border-red-500' : 'border-gray-300'}`}
+                          />
+                          <div className="text-xs text-gray-500 mt-1">Max: {parseNumber(formData.rejects)}</div>
+                          {errors.rejectionCount && <div className="text-xs text-red-600 mt-1">{errors.rejectionCount}</div>}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Model *</Label>
-                 <Select value={formData.model} onValueChange={(value) => updateField('model', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('model') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select model" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.MODEL?.map((model) => (
-                       <SelectItem key={model} value={model}>{model}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('model') && (
-                   <p className="text-sm text-red-600">{getFieldError('model')}</p>
-                 )}
-               </div>
+            {/* Operators Section - Vertical List */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">
+                  Operators *
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    {formData.operatorNames.filter(name => name.trim()).length}/8
+                  </Badge>
+                </Label>
+                <Button
+                  type="button"
+                  onClick={addOperator}
+                  disabled={formData.operatorNames.length >= 8}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Operator
+                </Button>
+              </div>
 
-               <div className="space-y-2">
-                 <Label htmlFor="operators" className="text-sm font-semibold text-gray-700">Number of Operators *</Label>
-                 <Input
-                   id="operators"
-                   type="number"
-                   min="1"
-                   value={formData.numOfOperators || ''}
-                   onChange={(e) => updateField('numOfOperators', parseInt(e.target.value) || 0)}
-                   className={`h-11 ${hasError('numOfOperators') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                   placeholder="Enter number"
-                 />
-                 {hasError('numOfOperators') && (
-                   <p className="text-sm text-red-600">{getFieldError('numOfOperators')}</p>
-                 )}
-               </div>
-             </div>
-           </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-300 text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-16">#</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Operator Name</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-20">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formData.operatorNames.map((name, index) => (
+                      <tr key={index}>
+                        <td className="border border-gray-300 px-3 py-2 text-center font-medium">
+                          {index + 1}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <Input
+                            value={name}
+                            onChange={(e) => updateOperatorName(index, e.target.value)}
+                            placeholder={`Operator ${index + 1} name`}
+                            className="h-8 text-xs"
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2 text-center">
+                          {formData.operatorNames.length > 1 && (
+                            <Button
+                              type="button"
+                              onClick={() => removeOperator(index)}
+                              variant="outline"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {errors.operators && (
+                      <tr>
+                        <td colSpan={3} className="border border-gray-300 px-3 py-2">
+                          <span className="text-xs text-red-600">{errors.operators}</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-           <Separator className="my-8" />
+            {/* Production Summary */}
+            {(parseNumber(formData.goodParts) > 0 || parseNumber(formData.rejects) > 0) && (
+              <div className="mt-6">
+                <Label className="text-sm font-semibold mb-2 block">Production Summary</Label>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-sm">
+                    <thead>
+                      <tr>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total Production</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Efficiency %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Reject Rate %</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Target Achievement %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-300 px-4 py-3 text-center">
+                          <div className="text-lg font-bold">{(parseNumber(formData.goodParts) + parseNumber(formData.rejects)).toLocaleString()}</div>
+                          <div className="text-xs text-gray-600">Units</div>
+                        </td>
+                        <td className="border border-gray-300 px-4 py-3 text-center">
+                          <div className="text-lg font-bold">
+                            {parseNumber(formData.goodParts) + parseNumber(formData.rejects) > 0
+                              ? Math.round((parseNumber(formData.goodParts) / (parseNumber(formData.goodParts) + parseNumber(formData.rejects))) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-xs text-gray-600">Good / Total</div>
+                        </td>
+                        <td className="border border-gray-300 px-4 py-3 text-center">
+                          <div className="text-lg font-bold">
+                            {parseNumber(formData.goodParts) + parseNumber(formData.rejects) > 0
+                              ? Math.round((parseNumber(formData.rejects) / (parseNumber(formData.goodParts) + parseNumber(formData.rejects))) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-xs text-gray-600">Rejects / Total</div>
+                        </td>
+                        <td className="border border-gray-300 px-4 py-3 text-center">
+                          <div className="text-lg font-bold">
+                            {parseNumber(formData.ppcTarget) > 0
+                              ? Math.round(((parseNumber(formData.goodParts) + parseNumber(formData.rejects)) / parseNumber(formData.ppcTarget)) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-xs text-gray-600">Actual / Target</div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
-           {/* Section 3: Production Metrics */}
-           <div className="space-y-6">
-             <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
-               <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                 <Target className="h-4 w-4 text-purple-600" />
-               </div>
-               <h3 className="text-xl font-semibold text-gray-900">Production Metrics</h3>
-             </div>
+            {/* General Error */}
+            {errors.general && (
+              <Alert className="border-red-300 mt-6">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">{errors.general}</AlertDescription>
+              </Alert>
+            )}
 
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Available Time *</Label>
-                 <Select value={formData.availableTime} onValueChange={(value) => updateField('availableTime', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('availableTime') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select time" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.AVAILABLE_TIME?.map((time) => (
-                       <SelectItem key={time} value={time}>{time} minutes</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('availableTime') && (
-                   <p className="text-sm text-red-600">{getFieldError('availableTime')}</p>
-                 )}
-               </div>
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center pt-6 border-t border-gray-200 mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetForm}
+                disabled={loading}
+                className="px-6 py-2 flex items-center"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset Form
+              </Button>
 
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Line Capacity *</Label>
-                 <Select value={formData.lineCapacity} onValueChange={(value) => updateField('lineCapacity', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('lineCapacity') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select capacity" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.LINE_CAPACITY?.map((capacity) => (
-                       <SelectItem key={capacity} value={capacity}>{capacity} units/hr</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('lineCapacity') && (
-                   <p className="text-sm text-red-600">{getFieldError('lineCapacity')}</p>
-                 )}
-               </div>
-
-               <div className="space-y-2">
-                 <Label htmlFor="ppcTarget" className="text-sm font-semibold text-gray-700">PPC Target *</Label>
-                 <Input
-                   id="ppcTarget"
-                   type="number"
-                   min="1"
-                   value={formData.ppcTarget || ''}
-                   onChange={(e) => updateField('ppcTarget', parseInt(e.target.value) || 0)}
-                   className={`h-11 ${hasError('ppcTarget') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                   placeholder="Enter target"
-                 />
-                 {hasError('ppcTarget') && (
-                   <p className="text-sm text-red-600">{getFieldError('ppcTarget')}</p>
-                 )}
-               </div>
-
-               <div className="space-y-2">
-                 <Label htmlFor="lossTime" className="text-sm font-semibold text-gray-700">Loss Time (min) *</Label>
-                 <Input
-                   id="lossTime"
-                   type="number"
-                   min="0"
-                   value={formData.lossTime || ''}
-                   onChange={(e) => updateField('lossTime', parseInt(e.target.value) || 0)}
-                   className={`h-11 ${hasError('lossTime') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                   placeholder="Enter loss time"
-                 />
-                 {hasError('lossTime') && (
-                   <p className="text-sm text-red-600">{getFieldError('lossTime')}</p>
-                 )}
-               </div>
-             </div>
-
-             {/* Production Results */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <Card className="bg-green-50 border-green-200">
-                 <CardContent className="p-6">
-                   <div className="flex items-center justify-between mb-3">
-                     <Label htmlFor="goodParts" className="text-sm font-semibold text-green-800">Good Parts Produced *</Label>
-                     <CheckCircle className="h-5 w-5 text-green-600" />
-                   </div>
-                   <Input
-                     id="goodParts"
-                     type="number"
-                     min="0"
-                     value={formData.goodParts || ''}
-                     onChange={(e) => updateField('goodParts', parseInt(e.target.value) || 0)}
-                     className={`h-12 text-lg font-semibold ${hasError('goodParts') ? 'border-red-500 bg-red-50' : 'border-green-300 bg-white'}`}
-                     placeholder="Enter good parts count"
-                   />
-                   {hasError('goodParts') && (
-                     <p className="text-sm text-red-600 mt-1">{getFieldError('goodParts')}</p>
-                   )}
-                 </CardContent>
-               </Card>
-
-               <Card className="bg-red-50 border-red-200">
-                 <CardContent className="p-6">
-                   <div className="flex items-center justify-between mb-3">
-                     <Label htmlFor="rejects" className="text-sm font-semibold text-red-800">Rejected Parts *</Label>
-                     <XCircle className="h-5 w-5 text-red-600" />
-                   </div>
-                   <Input
-                     id="rejects"
-                     type="number"
-                     min="0"
-                     value={formData.rejects || ''}
-                     onChange={(e) => updateField('rejects', parseInt(e.target.value) || 0)}
-                     className={`h-12 text-lg font-semibold ${hasError('rejects') ? 'border-red-500 bg-red-100' : 'border-red-300 bg-white'}`}
-                     placeholder="Enter rejects count"
-                   />
-                   {hasError('rejects') && (
-                     <p className="text-sm text-red-600 mt-1">{getFieldError('rejects')}</p>
-                   )}
-                 </CardContent>
-               </Card>
-             </div>
-           </div>
-
-           <Separator className="my-8" />
-
-           {/* Section 4: Problem Analysis */}
-           <div className="space-y-6">
-             <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
-               <div className="h-8 w-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                 <AlertTriangle className="h-4 w-4 text-orange-600" />
-               </div>
-               <h3 className="text-xl font-semibold text-gray-900">Problem Analysis</h3>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Problem Head *</Label>
-                 <Select value={formData.problemHead} onValueChange={(value) => updateField('problemHead', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('problemHead') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select problem category" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.PROBLEM_HEAD?.map((problem) => (
-                       <SelectItem key={problem} value={problem}>{problem}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('problemHead') && (
-                   <p className="text-sm text-red-600">{getFieldError('problemHead')}</p>
-                 )}
-               </div>
-
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Description *</Label>
-                 <Select value={formData.description} onValueChange={(value) => updateField('description', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('description') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select description" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.DESCRIPTION?.map((desc) => (
-                       <SelectItem key={desc} value={desc}>{desc}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('description') && (
-                   <p className="text-sm text-red-600">{getFieldError('description')}</p>
-                 )}
-               </div>
-
-               <div className="space-y-2">
-                 <Label className="text-sm font-semibold text-gray-700">Responsibility *</Label>
-                 <Select value={formData.responsibility} onValueChange={(value) => updateField('responsibility', value)}>
-                   <SelectTrigger className={`h-11 ${hasError('responsibility') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                     <SelectValue placeholder="Select department" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {parameters.RESPONSIBILITY?.map((resp) => (
-                       <SelectItem key={resp} value={resp}>{resp}</SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {hasError('responsibility') && (
-                   <p className="text-sm text-red-600">{getFieldError('responsibility')}</p>
-                 )}
-               </div>
-             </div>
-           </div>
-
-           <Separator className="my-8" />
-
-           {/* Section 5: Quality Control */}
-           <div className="space-y-6">
-             <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-               <div className="flex items-center space-x-3">
-                 <div className="h-8 w-8 bg-red-100 rounded-lg flex items-center justify-center">
-                   <XCircle className="h-4 w-4 text-red-600" />
-                 </div>
-                 <h3 className="text-xl font-semibold text-gray-900">Quality Control & Rejection Details</h3>
-               </div>
-               {formData.rejects > 0 && (
-                 <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-300">
-                   Required - Rejects detected
-                 </Badge>
-               )}
-             </div>
-
-             {formData.rejects === 0 ? (
-               <Card className="bg-green-50 border-green-200">
-                 <CardContent className="p-6 text-center">
-                   <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
-                   <h4 className="text-lg font-semibold text-green-800 mb-2">Excellent Quality!</h4>
-                   <p className="text-green-700">No rejects reported - Quality control section is optional.</p>
-                 </CardContent>
-               </Card>
-             ) : (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div className="space-y-2">
-                   <Label htmlFor="rejectionPhenomena" className="text-sm font-semibold text-gray-700">
-                     Rejection Phenomena *
-                   </Label>
-                   <Input
-                     id="rejectionPhenomena"
-                     value={formData.rejectionPhenomena}
-                     onChange={(e) => updateField('rejectionPhenomena', e.target.value)}
-                     className={`h-11 ${hasError('rejectionPhenomena') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                     placeholder="Describe rejection phenomena"
-                   />
-                   {hasError('rejectionPhenomena') && (
-                     <p className="text-sm text-red-600">{getFieldError('rejectionPhenomena')}</p>
-                   )}
-                 </div>
-
-                 <div className="space-y-2">
-                   <Label htmlFor="rejectionCause" className="text-sm font-semibold text-gray-700">
-                     Root Cause *
-                   </Label>
-                   <Input
-                     id="rejectionCause"
-                     value={formData.rejectionCause}
-                     onChange={(e) => updateField('rejectionCause', e.target.value)}
-                     className={`h-11 ${hasError('rejectionCause') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                     placeholder="Enter root cause analysis"
-                   />
-                   {hasError('rejectionCause') && (
-                     <p className="text-sm text-red-600">{getFieldError('rejectionCause')}</p>
-                   )}
-                 </div>
-
-                 <div className="space-y-2">
-                   <Label htmlFor="rejectionCorrectiveAction" className="text-sm font-semibold text-gray-700">
-                     Corrective Action *
-                   </Label>
-                   <Input
-                     id="rejectionCorrectiveAction"
-                     value={formData.rejectionCorrectiveAction}
-                     onChange={(e) => updateField('rejectionCorrectiveAction', e.target.value)}
-                     className={`h-11 ${hasError('rejectionCorrectiveAction') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                     placeholder="Describe corrective action taken"
-                   />
-                   {hasError('rejectionCorrectiveAction') && (
-                     <p className="text-sm text-red-600">{getFieldError('rejectionCorrectiveAction')}</p>
-                   )}
-                 </div>
-
-                 <div className="space-y-2">
-                   <Label htmlFor="rejectionCount" className="text-sm font-semibold text-gray-700">
-                     Rejection Count *
-                   </Label>
-                   <Input
-                     id="rejectionCount"
-                     type="number"
-                     min="0"
-                     max={formData.rejects}
-                     value={formData.rejectionCount || ''}
-                     onChange={(e) => updateField('rejectionCount', parseInt(e.target.value) || 0)}
-                     className={`h-11 ${hasError('rejectionCount') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                     placeholder="Enter rejection count"
-                   />
-                   <p className="text-xs text-gray-500">Maximum: {formData.rejects}</p>
-                   {hasError('rejectionCount') && (
-                     <p className="text-sm text-red-600">{getFieldError('rejectionCount')}</p>
-                   )}
-                 </div>
-               </div>
-             )}
-           </div>
-
-           {/* General Error */}
-           {errors.general && (
-             <Alert className="border-red-200 bg-red-50">
-               <AlertTriangle className="h-4 w-4 text-red-600" />
-               <AlertDescription className="text-red-800">{errors.general}</AlertDescription>
-             </Alert>
-           )}
-
-           {/* Action Buttons */}
-           <div className="flex justify-between items-center pt-8 border-t border-gray-200">
-             <Button
-               type="button"
-               variant="outline"
-               onClick={resetForm}
-               disabled={loading}
-               className="px-6 py-3"
-             >
-               Reset Form
-             </Button>
-
-             <Button
-               type="submit"
-               disabled={loading}
-               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 text-lg font-semibold min-w-[200px]"
-             >
-               {loading ? (
-                 <>
-                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                   Submitting Entry...
-                 </>
-               ) : (
-                 <>
-                   <CheckCircle className="mr-2 h-5 w-5" />
-                   Submit for Approval
-                 </>
-               )}
-             </Button>
-           </div>
-         </form>
-       </CardContent>
-     </Card>
-   </div>
- )
+              <Button
+                type="submit"
+                disabled={loading}
+                className="px-8 py-2 font-semibold min-w-[180px]"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {isEditing ? 'Updating...' : 'Submitting...'}
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    {isEditing ? 'Update Entry' : 'Submit for Approval'}
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }

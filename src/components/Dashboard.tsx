@@ -16,13 +16,13 @@ import EntryForm from './EntryForm'
 import EntryDetails from './EntryDetails'
 import { useRouter } from 'next/navigation'
 import { Entry, User } from '@/types'
-import { 
-  Plus, 
-  BarChart3, 
-  LogOut, 
-  CheckCircle, 
-  Clock, 
-  XCircle, 
+import {
+  Plus,
+  BarChart3,
+  LogOut,
+  CheckCircle,
+  Clock,
+  XCircle,
   FileText,
   Factory,
   ArrowLeft,
@@ -37,6 +37,7 @@ import {
   ChevronRight,
   Search
 } from 'lucide-react'
+import { calculateOEE, getOEECategory } from '@/lib/oee'
 
 interface DashboardProps {
   user: User
@@ -160,7 +161,7 @@ export default function Dashboard({ user }: DashboardProps) {
     // Search filter
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase()
-      filtered = filtered.filter(entry => 
+      filtered = filtered.filter(entry =>
         entry.model.toLowerCase().includes(searchLower) ||
         entry.teamLeader.toLowerCase().includes(searchLower) ||
         entry.line.toLowerCase().includes(searchLower) ||
@@ -170,7 +171,7 @@ export default function Dashboard({ user }: DashboardProps) {
     }
 
     setFilteredEntries(filtered)
-    
+
     // Update pagination
     const totalPages = Math.ceil(filtered.length / pagination.itemsPerPage)
     setPagination(prev => ({
@@ -220,7 +221,7 @@ export default function Dashboard({ user }: DashboardProps) {
       const response = await fetch(`/api/entries/${entryId}/approve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           status,
           rejectionReason: status === 'REJECTED' ? reason : undefined
         })
@@ -228,11 +229,11 @@ export default function Dashboard({ user }: DashboardProps) {
 
       if (response.ok) {
         await fetchEntries()
-        setNotification({ 
-          type: 'success', 
-          message: `Entry ${status.toLowerCase()} successfully!` 
+        setNotification({
+          type: 'success',
+          message: `Entry ${status.toLowerCase()} successfully!`
         })
-        
+
         if (selectedEntry && selectedEntry.id === entryId) {
           const updatedEntry = entries.find(e => e.id === entryId)
           if (updatedEntry) {
@@ -241,9 +242,9 @@ export default function Dashboard({ user }: DashboardProps) {
         }
       } else {
         const errorData = await response.json()
-        setNotification({ 
-          type: 'error', 
-          message: errorData.error || 'Failed to update entry status' 
+        setNotification({
+          type: 'error',
+          message: errorData.error || 'Failed to update entry status'
         })
       }
     } catch (error) {
@@ -323,9 +324,9 @@ export default function Dashboard({ user }: DashboardProps) {
     setActiveView('entries')
     setEditingEntry(null)
     fetchEntries()
-    setNotification({ 
-      type: 'success', 
-      message: editingEntry ? 'Entry updated successfully!' : 'Entry submitted successfully!' 
+    setNotification({
+      type: 'success',
+      message: editingEntry ? 'Entry updated successfully!' : 'Entry submitted successfully!'
     })
   }
 
@@ -343,26 +344,26 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const getStatusBadge = (status: string) => {
     const config = {
-      PENDING: { 
-        variant: 'secondary' as const, 
-        icon: Clock, 
-        className: 'bg-yellow-100 text-yellow-800 border-yellow-300' 
+      PENDING: {
+        variant: 'secondary' as const,
+        icon: Clock,
+        className: 'bg-yellow-100 text-yellow-800 border-yellow-300'
       },
-      APPROVED: { 
-        variant: 'default' as const, 
-        icon: CheckCircle, 
-        className: 'bg-green-100 text-green-800 border-green-300' 
+      APPROVED: {
+        variant: 'default' as const,
+        icon: CheckCircle,
+        className: 'bg-green-100 text-green-800 border-green-300'
       },
-      REJECTED: { 
-        variant: 'destructive' as const, 
-        icon: XCircle, 
-        className: 'bg-red-100 text-red-800 border-red-300' 
+      REJECTED: {
+        variant: 'destructive' as const,
+        icon: XCircle,
+        className: 'bg-red-100 text-red-800 border-red-300'
       }
     }
-    
+
     const statusConfig = config[status as keyof typeof config]
     const Icon = statusConfig.icon
-    
+
     return (
       <Badge variant={statusConfig.variant} className={statusConfig.className}>
         <Icon className="w-3 h-3 mr-1" />
@@ -394,7 +395,7 @@ export default function Dashboard({ user }: DashboardProps) {
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">Entry Details</h1>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">{user.name}</span> 
+                    <span className="font-medium">{user.name}</span>
                     <Badge variant="outline" className="ml-2">
                       {user.role.replace('_', ' ')}
                     </Badge>
@@ -410,8 +411,8 @@ export default function Dashboard({ user }: DashboardProps) {
         </header>
 
         <div className="max-w-7xl mx-auto p-6">
-          <EntryDetails 
-            entry={selectedEntry} 
+          <EntryDetails
+            entry={selectedEntry}
             onClose={handleBackToEntries}
             onEdit={handleEditFromDetails}
             onApprove={user.role === 'SUPERVISOR' ? handleApproval : undefined}
@@ -436,7 +437,7 @@ export default function Dashboard({ user }: DashboardProps) {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Manufacturing Dashboard</h1>
                 <p className="text-sm text-gray-600">
-                  Welcome back, <span className="font-medium">{user.name}</span> 
+                  Welcome back, <span className="font-medium">{user.name}</span>
                   <Badge variant="outline" className="ml-2">
                     {user.role.replace('_', ' ')}
                   </Badge>
@@ -445,8 +446,8 @@ export default function Dashboard({ user }: DashboardProps) {
             </div>
             <div className="flex items-center space-x-3">
               {user.role === 'SUPERVISOR' && (
-                <Button 
-                  onClick={() => router.push('/dashboard/analytics')} 
+                <Button
+                  onClick={() => router.push('/dashboard/analytics')}
                   variant="outline"
                   className="hidden sm:flex"
                 >
@@ -466,11 +467,10 @@ export default function Dashboard({ user }: DashboardProps) {
       <div className="max-w-7xl mx-auto p-6">
         {/* Notification */}
         {notification && (
-          <Alert className={`mb-6 ${
-            notification.type === 'success' 
-              ? 'border-green-200 bg-green-50' 
-              : 'border-red-200 bg-red-50'
-          }`}>
+          <Alert className={`mb-6 ${notification.type === 'success'
+            ? 'border-green-200 bg-green-50'
+            : 'border-red-200 bg-red-50'
+            }`}>
             {notification.type === 'success' ? (
               <CheckCircle className="h-4 w-4 text-green-600" />
             ) : (
@@ -537,16 +537,16 @@ export default function Dashboard({ user }: DashboardProps) {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
               <div>
                 <CardTitle className="text-xl text-gray-900">
-                  {activeView === 'entries' 
-                    ? 'Hourly Production Entries' 
-                    : editingEntry 
+                  {activeView === 'entries'
+                    ? 'Hourly Production Entries'
+                    : editingEntry
                       ? 'Edit Production Entry'
                       : 'Create New Entry'
                   }
                 </CardTitle>
                 <CardDescription>
-                  {activeView === 'entries' 
-                    ? user.role === 'TEAM_LEADER' 
+                  {activeView === 'entries'
+                    ? user.role === 'TEAM_LEADER'
                       ? 'Manage hourly production entries and track approval status'
                       : 'Review and approve hourly production entries from team leaders'
                     : editingEntry
@@ -558,8 +558,8 @@ export default function Dashboard({ user }: DashboardProps) {
 
               <div className="flex space-x-2">
                 {activeView === 'create' && (
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={handleBackToEntries}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
@@ -568,14 +568,14 @@ export default function Dashboard({ user }: DashboardProps) {
                 )}
                 {activeView === 'entries' && (
                   <>
-                    <Button 
+                    <Button
                       variant="outline"
                       onClick={() => setShowFilters(!showFilters)}
                     >
                       <Filter className="mr-2 h-4 w-4" />
                       {showFilters ? 'Hide Filters' : 'Show Filters'}
                     </Button>
-                    <Button 
+                    <Button
                       className="bg-blue-600 hover:bg-blue-700"
                       onClick={handleCreateNew}
                     >
@@ -701,9 +701,9 @@ export default function Dashboard({ user }: DashboardProps) {
 
                         {/* Clear Filters */}
                         <div className="flex items-end">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={clearFilters}
                             className="h-8 text-xs"
                           >
@@ -716,20 +716,20 @@ export default function Dashboard({ user }: DashboardProps) {
                 )}
 
                 {/* Filter Summary */}
-                {(filters.status !== 'all' || filters.shift !== 'all' || filters.line !== 'all' || 
+                {(filters.status !== 'all' || filters.shift !== 'all' || filters.line !== 'all' ||
                   filters.teamLeader !== 'all' || filters.dateFrom || filters.dateTo || filters.searchTerm) && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-blue-800">
-                        <Search className="h-4 w-4 inline mr-1" />
-                        Showing {stats.total} of {entries.length} entries
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-blue-800">
+                          <Search className="h-4 w-4 inline mr-1" />
+                          Showing {stats.total} of {entries.length} entries
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={clearFilters} className="text-blue-600 text-xs">
+                          Clear Filters
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-blue-600 text-xs">
-                        Clear Filters
-                      </Button>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Entries Table */}
                 {loading ? (
@@ -742,9 +742,9 @@ export default function Dashboard({ user }: DashboardProps) {
                     <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500 text-lg">No entries found</p>
                     <p className="text-gray-400 mb-6">
-                      {Object.values(filters).some(f => f && f !== 'all') 
+                      {Object.values(filters).some(f => f && f !== 'all')
                         ? 'Try adjusting your filters or create a new entry'
-                        : user.role === 'TEAM_LEADER' 
+                        : user.role === 'TEAM_LEADER'
                           ? 'Create your first hourly entry to get started'
                           : 'No entries are currently available for review'
                       }
@@ -755,7 +755,7 @@ export default function Dashboard({ user }: DashboardProps) {
                           Clear Filters
                         </Button>
                       )}
-                      <Button 
+                      <Button
                         onClick={handleCreateNew}
                         className="bg-blue-600 hover:bg-blue-700"
                       >
@@ -776,7 +776,7 @@ export default function Dashboard({ user }: DashboardProps) {
                             <TableHead className="font-semibold">Hour</TableHead>
                             <TableHead className="font-semibold">Model</TableHead>
                             <TableHead className="font-semibold">Production</TableHead>
-                            <TableHead className="font-semibold">Efficiency</TableHead>
+                             <TableHead className="font-semibold">OEE</TableHead> 
                             <TableHead className="font-semibold">Status</TableHead>
                             <TableHead className="font-semibold">Team Leader</TableHead>
                             <TableHead className="font-semibold">Actions</TableHead>
@@ -785,277 +785,293 @@ export default function Dashboard({ user }: DashboardProps) {
                         <TableBody>
                           {paginatedEntries.map((entry) => {
                             const totalParts = entry.goodParts + entry.rejects
-                            const efficiency = totalParts > 0 ? Math.round((entry.goodParts / totalParts) * 100) : 0
-                           
-                           return (
-                             <TableRow key={entry.id} className="hover:bg-gray-50">
-                               <TableCell className="font-medium">
-                                 <div className="flex items-center">
-                                   <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                                   {new Date(entry.date).toLocaleDateString()}
-                                 </div>
-                               </TableCell>
-                               <TableCell>
-                                 <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                                   {entry.line}
-                                 </Badge>
-                               </TableCell>
-                               <TableCell>
-                                 <Badge variant="outline">
-                                   {entry.shift}
-                                 </Badge>
-                               </TableCell>
-                               <TableCell>
-                                 <Badge variant="outline" className="bg-gray-100 text-gray-700 font-mono text-xs">
-                                   {entry.hour}
-                                 </Badge>
-                               </TableCell>
-                               <TableCell>{entry.model}</TableCell>
-                               <TableCell>
-                                 <div className="space-y-1">
-                                   <div className="flex items-center text-sm">
-                                     <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                                     <span className="text-green-600 font-medium">
-                                       {entry.goodParts.toLocaleString()}
-                                     </span>
-                                   </div>
-                                   <div className="flex items-center text-sm">
-                                     <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
-                                     <span className="text-red-600">
-                                       {entry.rejects.toLocaleString()}
-                                     </span>
-                                   </div>
-                                 </div>
-                               </TableCell>
-                               <TableCell>
-                                 <div className="flex items-center space-x-2">
-                                   <div className="w-12 bg-gray-200 rounded-full h-2">
-                                     <div 
-                                       className={`h-2 rounded-full ${
-                                         efficiency >= 95 ? 'bg-green-500' : 
-                                         efficiency >= 85 ? 'bg-blue-500' : 
-                                         efficiency >= 75 ? 'bg-yellow-500' : 'bg-red-500'
-                                       }`}
-                                       style={{ width: `${efficiency}%` }}
-                                     ></div>
-                                   </div>
-                                   <span className="text-sm font-medium">{efficiency}%</span>
-                                 </div>
-                               </TableCell>
-                               <TableCell>
-                                 <div className="space-y-1">
-                                   {getStatusBadge(entry.status)}
-                                   {entry.status === 'REJECTED' && entry.rejectionReason && (
-                                     <div className="text-xs text-red-600 max-w-48 truncate">
-                                       Reason: {entry.rejectionReason}
-                                     </div>
-                                   )}
-                                 </div>
-                               </TableCell>
-                               <TableCell>
-                                 <div className="text-sm">
-                                   <div className="font-medium">{entry.submittedBy.name}</div>
-                                   <div className="text-gray-500">
-                                     {new Date(entry.createdAt).toLocaleDateString()}
-                                   </div>
-                                 </div>
-                               </TableCell>
-                               <TableCell>
-                                 <div className="flex flex-wrap gap-2">
-                                   <Button
-                                     size="sm"
-                                     variant="outline"
-                                     onClick={() => handleViewDetails(entry)}
-                                   >
-                                     <Eye className="mr-1 h-3 w-3" />
-                                     View
-                                   </Button>
-                                   
-                                   {/* Edit button for Team Leaders (only pending entries) */}
-                                   {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
-                                     <Button
-                                       size="sm"
-                                       variant="outline"
-                                       onClick={() => handleEditEntry(entry.id)}
-                                     >
-                                       <Edit className="mr-1 h-3 w-3" />
-                                       Edit
-                                     </Button>
-                                   )}
-                                   
-                                   {/* Edit button for Supervisors (all entries) */}
-                                   {user.role === 'SUPERVISOR' && (
-                                     <Button
-                                       size="sm"
-                                       variant="outline"
-                                       onClick={() => handleEditEntry(entry.id)}
-                                     >
-                                       <Edit className="mr-1 h-3 w-3" />
-                                       Edit
-                                     </Button>
-                                   )}
-                                   
-                                   {/* Approval buttons for Supervisors */}
-                                   {user.role === 'SUPERVISOR' && entry.status === 'PENDING' && (
-                                     <>
-                                       <Button
-                                         size="sm"
-                                         onClick={() => handleApproval(entry.id, 'APPROVED')}
-                                         className="bg-green-600 hover:bg-green-700"
-                                         disabled={submitting}
-                                       >
-                                         <CheckCircle className="mr-1 h-3 w-3" />
-                                         Approve
-                                       </Button>
-                                       <Button
-                                         size="sm"
-                                         variant="destructive"
-                                         onClick={() => handleRejectClick(entry.id)}
-                                         disabled={submitting}
-                                       >
-                                         <XCircle className="mr-1 h-3 w-3" />
-                                         Reject
-                                       </Button>
-                                     </>
-                                   )}
-                                 </div>
-                               </TableCell>
-                             </TableRow>
-                           )
-                         })}
-                       </TableBody>
-                     </Table>
-                   </div>
+                            const oeeData = calculateOEE(
+                              entry.availableTime,
+                              entry.lossTime,
+                              entry.lineCapacity,
+                              entry.goodParts,
+                              entry.rejects
+                            )
 
-                   {/* Pagination */}
-                   {pagination.totalPages > 1 && (
-                     <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-                       <div className="text-sm text-gray-600">
-                         Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
-                         {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
-                         {pagination.totalItems} entries
-                       </div>
-                       
-                       <div className="flex items-center space-x-2">
-                         <Button
-                           variant="outline"
-                           size="sm"
-                           onClick={() => changePage(pagination.currentPage - 1)}
-                           disabled={pagination.currentPage === 1}
-                           className="h-8"
-                         >
-                           <ChevronLeft className="h-4 w-4" />
-                           Previous
-                         </Button>
-                         
-                         <div className="flex items-center space-x-1">
-                           {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                             let pageNum: number
-                             
-                             if (pagination.totalPages <= 5) {
-                               pageNum = i + 1
-                             } else {
-                               if (pagination.currentPage <= 3) {
-                                 pageNum = i + 1
-                               } else if (pagination.currentPage >= pagination.totalPages - 2) {
-                                 pageNum = pagination.totalPages - 4 + i
-                               } else {
-                                 pageNum = pagination.currentPage - 2 + i
-                               }
-                             }
-                             
-                             return (
-                               <Button
-                                 key={pageNum}
-                                 variant={pagination.currentPage === pageNum ? "default" : "outline"}
-                                 size="sm"
-                                 onClick={() => changePage(pageNum)}
-                                 className="h-8 w-8 p-0"
-                               >
-                                 {pageNum}
-                               </Button>
-                             )
-                           })}
-                         </div>
-                         
-                         <Button
-                           variant="outline"
-                           size="sm"
-                           onClick={() => changePage(pagination.currentPage + 1)}
-                           disabled={pagination.currentPage === pagination.totalPages}
-                           className="h-8"
-                         >
-                           Next
-                           <ChevronRight className="h-4 w-4" />
-                         </Button>
-                       </div>
-                     </div>
-                   )}
-                 </>
-               )}
-             </>
-           ) : (
-             // Entry Form View
-             <div className="max-w-none">
-               <EntryForm 
-                 onSuccess={handleEntrySuccess}
-                 onClose={user.role === 'SUPERVISOR' ? handleBackToEntries : undefined}
-                 editingEntry={editingEntry}
-                 isEditing={!!editingEntry}
-                 showCloseButton={user.role === 'SUPERVISOR'}
-               />
-             </div>
-           )}
-         </CardContent>
-       </Card>
-     </div>
+                            const oeeCategory = getOEECategory(oeeData.oee)
 
-     {/* Rejection Dialog */}
-     <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
-       <DialogContent className="max-w-md">
-         <DialogHeader>
-           <DialogTitle className="flex items-center text-red-700">
-             <XCircle className="mr-2 h-5 w-5" />
-             Reject Entry
-           </DialogTitle>
-           <DialogDescription>
-             Please provide a reason for rejecting this production entry. The team leader will see this feedback.
-           </DialogDescription>
-         </DialogHeader>
-         <div className="space-y-4">
-           <div>
-             <Label htmlFor="rejectionReason">Rejection Reason *</Label>
-             <Textarea
-               id="rejectionReason"
-               value={rejectionReason}
-               onChange={(e) => setRejectionReason(e.target.value)}
-               placeholder="Enter detailed reason for rejection..."
-               className="mt-1 min-h-[100px]"
-               required
-             />
-           </div>
-           <div className="flex justify-end space-x-2">
-             <Button variant="outline" onClick={handleRejectCancel} disabled={submitting}>
-               Cancel
-             </Button>
-             <Button 
-               variant="destructive" 
-               onClick={handleRejectConfirm}
-               disabled={!rejectionReason.trim() || submitting}
-             >
-               {submitting ? (
-                 <>
-                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                   Rejecting...
-                 </>
-               ) : (
-                 'Reject Entry'
-               )}
-             </Button>
-           </div>
-         </div>
-       </DialogContent>
-     </Dialog>
-   </div>
- )
+                            return (
+                              <TableRow key={entry.id} className="hover:bg-gray-50">
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center">
+                                    <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                                    {new Date(entry.date).toLocaleDateString()}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                                    {entry.line}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">
+                                    {entry.shift}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="bg-gray-100 text-gray-700 font-mono text-xs">
+                                    {entry.hour}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{entry.model}</TableCell>
+                                <TableCell>
+                                  <div className="space-y-1">
+                                    <div className="flex items-center text-sm">
+                                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                                      <span className="text-green-600 font-medium">
+                                        {entry.goodParts.toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center text-sm">
+                                      <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                                      <span className="text-red-600">
+                                        {entry.rejects.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {/* Replace efficiency with OEE */}
+                                  <div className="flex items-center justify-center flex-col">
+                                    <div className="text-right">
+                                      <div className={`text-sm font-bold ${oeeCategory.color}`}>
+                                        {oeeData.oee}%
+                                      </div>
+                                    </div>
+                                    <div className="w-12 bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className={`h-2 rounded-full ${oeeData.oee >= 85 ? 'bg-green-500' :
+                                            oeeData.oee >= 60 ? 'bg-blue-500' :
+                                              oeeData.oee >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                          }`}
+                                        style={{ width: `${Math.min(oeeData.oee, 100)}%` }}
+                                      ></div>
+                                    </div>
+                                    
+                                  </div>
+                                  {/* <div className="text-xs text-gray-500 mt-1 font-semibold">
+                                    A:{oeeData.availability}% P:{oeeData.performance}% Q:{oeeData.quality}%
+                                  </div> */}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="space-y-1">
+                                    {getStatusBadge(entry.status)}
+                                    {entry.status === 'REJECTED' && entry.rejectionReason && (
+                                      <div className="text-xs text-red-600 max-w-48 truncate">
+                                        Reason: {entry.rejectionReason}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm">
+                                    <div className="font-medium">{entry.submittedBy.name}</div>
+                                    <div className="text-gray-500">
+                                      {new Date(entry.createdAt).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleViewDetails(entry)}
+                                    >
+                                      <Eye className="mr-1 h-3 w-3" />
+                                      View
+                                    </Button>
+
+                                    {/* Edit button for Team Leaders (only pending entries) */}
+                                    {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleEditEntry(entry.id)}
+                                      >
+                                        <Edit className="mr-1 h-3 w-3" />
+                                        Edit
+                                      </Button>
+                                    )}
+
+                                    {/* Edit button for Supervisors (all entries) */}
+                                    {user.role === 'SUPERVISOR' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleEditEntry(entry.id)}
+                                      >
+                                        <Edit className="mr-1 h-3 w-3" />
+                                        Edit
+                                      </Button>
+                                    )}
+
+                                    {/* Approval buttons for Supervisors */}
+                                    {user.role === 'SUPERVISOR' && entry.status === 'PENDING' && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleApproval(entry.id, 'APPROVED')}
+                                          className="bg-green-600 hover:bg-green-700"
+                                          disabled={submitting}
+                                        >
+                                          <CheckCircle className="mr-1 h-3 w-3" />
+                                          Approve
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          onClick={() => handleRejectClick(entry.id)}
+                                          disabled={submitting}
+                                        >
+                                          <XCircle className="mr-1 h-3 w-3" />
+                                          Reject
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    {pagination.totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                        <div className="text-sm text-gray-600">
+                          Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
+                          {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
+                          {pagination.totalItems} entries
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => changePage(pagination.currentPage - 1)}
+                            disabled={pagination.currentPage === 1}
+                            className="h-8"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Previous
+                          </Button>
+
+                          <div className="flex items-center space-x-1">
+                            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                              let pageNum: number
+
+                              if (pagination.totalPages <= 5) {
+                                pageNum = i + 1
+                              } else {
+                                if (pagination.currentPage <= 3) {
+                                  pageNum = i + 1
+                                } else if (pagination.currentPage >= pagination.totalPages - 2) {
+                                  pageNum = pagination.totalPages - 4 + i
+                                } else {
+                                  pageNum = pagination.currentPage - 2 + i
+                                }
+                              }
+
+                              return (
+                                <Button
+                                  key={pageNum}
+                                  variant={pagination.currentPage === pageNum ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => changePage(pageNum)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  {pageNum}
+                                </Button>
+                              )
+                            })}
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => changePage(pagination.currentPage + 1)}
+                            disabled={pagination.currentPage === pagination.totalPages}
+                            className="h-8"
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              // Entry Form View
+              <div className="max-w-none">
+                <EntryForm
+                  onSuccess={handleEntrySuccess}
+                  onClose={user.role === 'SUPERVISOR' ? handleBackToEntries : undefined}
+                  editingEntry={editingEntry}
+                  isEditing={!!editingEntry}
+                  showCloseButton={user.role === 'SUPERVISOR'}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rejection Dialog */}
+      <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-700">
+              <XCircle className="mr-2 h-5 w-5" />
+              Reject Entry
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this production entry. The team leader will see this feedback.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rejectionReason">Rejection Reason *</Label>
+              <Textarea
+                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Enter detailed reason for rejection..."
+                className="mt-1 min-h-[100px]"
+                required
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={handleRejectCancel} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRejectConfirm}
+                disabled={!rejectionReason.trim() || submitting}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Rejecting...
+                  </>
+                ) : (
+                  'Reject Entry'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }

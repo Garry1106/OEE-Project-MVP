@@ -17,14 +17,10 @@ export interface Entry {
   operatorNames: string[]
   availableTime: string
   lineCapacity: string
-  ppcTarget: number
-  goodParts: number
-  rejects: number
   problemHead: string
   description: string
   lossTime: number
   responsibility: string
-  productionType?: 'Single' | 'Sets'
   defectType?: 'Repeat' | 'New'
   newDefectDescription?: string
   rejectionPhenomena: string | null
@@ -37,6 +33,32 @@ export interface Entry {
   approvedBy?: { name: string; email: string }
   createdAt: string
   updatedAt: string
+
+
+  productionType?: 'LH' | 'RH' | 'BOTH'
+  
+  // Updated target fields
+  ppcTarget?: number
+  ppcTargetLH?: number
+  ppcTargetRH?: number
+  
+  // Updated production fields
+  goodParts?: number
+  goodPartsLH?: number
+  goodPartsRH?: number
+  
+  // NEW: SPD fields
+  spdParts?: number
+  spdPartsLH?: number
+  spdPartsRH?: number
+  
+  // Updated rejection fields
+  rejects?: number
+  rejectsLH?: number
+  rejectsRH?: number
+
+
+
 
 
   // 4M Change tracking
@@ -62,9 +84,6 @@ export interface Entry {
   methodSC?: string
   methodGeneral?: string
 
-
-
-
 }
 
 export interface FormData {
@@ -78,20 +97,47 @@ export interface FormData {
   operatorNames: string[]
   availableTime: string
   lineCapacity: string
-  ppcTarget: string
-  goodParts: string
-  rejects: string
   problemHead: string
   description: string
   lossTime: string
   responsibility: string
-  productionType: 'Single' | 'Sets'
   defectType: 'Repeat' | 'New'
   newDefectDescription: string
   rejectionPhenomena: string
   rejectionCause: string
   rejectionCorrectiveAction: string
   rejectionCount: string
+
+
+  productionType: 'LH' | 'RH' | 'BOTH'
+  
+  // Updated target fields
+  ppcTarget: string
+  ppcTargetLH: string
+  ppcTargetRH: string
+  
+  // Updated production fields
+  goodParts: string
+  goodPartsLH: string
+  goodPartsRH: string
+  
+  // NEW: SPD fields
+  spdParts: string
+  spdPartsLH: string
+  spdPartsRH: string
+  
+  // Updated rejection fields
+  rejects: string
+  rejectsLH: string
+  rejectsRH: string
+  
+
+
+
+
+
+
+
 
   // 4M Change tracking
   has4MChange: boolean
@@ -116,7 +162,6 @@ export interface FormData {
   methodSC: string
   methodGeneral: string
 
-
 }
 
 export interface FormErrors {
@@ -133,4 +178,9 @@ export interface ShiftInfo {
   nextHour: string
   shiftName: string
   timeRemaining: string
+}
+export interface ShiftData {
+  date: string
+  line: string
+  operatorNames: string[]
 }

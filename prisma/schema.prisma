@@ -31,13 +31,33 @@ model Entry {
   operatorNames   String[]
   availableTime   String
   lineCapacity    String
-  ppcTarget       Int
-  goodParts       Int
-  rejects         Int
   problemHead     String
   description     String
   lossTime        Int
   responsibility  String
+
+    // Updated target fields
+  ppcTarget       Int?
+  ppcTargetLH     Int?
+  ppcTargetRH     Int?
+
+
+  // Updated production fields
+  goodParts       Int?
+  goodPartsLH     Int?
+  goodPartsRH     Int?
+  
+  // NEW: SPD fields
+  spdParts        Int?
+  spdPartsLH      Int?
+  spdPartsRH      Int?
+  
+  // Updated rejection fields
+  rejects         Int?
+  rejectsLH       Int?
+  rejectsRH       Int?
+
+  
   productionType  ProductionType?
   defectType      DefectType?
   newDefectDescription String?
@@ -112,9 +132,11 @@ enum Status {
 }
 
 enum ProductionType {
-  SINGLE
-  SETS
+  LH
+  RH
+  BOTH
 }
+
 
 enum DefectType {
   REPEAT

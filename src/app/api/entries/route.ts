@@ -3,29 +3,44 @@ import { prisma } from '@/lib/prisma'
 import { getUserFromToken } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
+  console.log('🚀 GET request initiated')
+  
   try {
     const token = request.cookies.get('token')?.value
+    console.log('🔑 Token extracted:', token ? 'Token exists' : 'No token found')
+    
     if (!token) {
+      console.log('❌ Authorization failed: No token')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const user = await getUserFromToken(token)
+    console.log('👤 User lookup result:', user ? `User found: ${user.email} (${user.role})` : 'User not found')
+    
     if (!user) {
+      console.log('❌ Authorization failed: Invalid token')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    console.log('🔍 Query parameters - status:', status || 'No status filter')
 
     let where: any = {}
 
     if (user.role === 'TEAM_LEADER') {
       where.submittedById = user.id
+      console.log('👑 Team leader access: Filtering by submittedById =', user.id)
+    } else {
+      console.log('🌐 Admin/other role access: No submittedById filter')
     }
 
     if (status) {
       where.status = status
+      console.log('📊 Adding status filter:', status)
     }
+
+    console.log('🔍 Final where clause:', JSON.stringify(where, null, 2))
 
     const entries = await prisma.entry.findMany({
       where,
@@ -36,8 +51,12 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' }
     })
 
+    console.log('📋 Entries retrieved:', entries.length, 'records found')
+    console.log('📝 Entry IDs:', entries.map(entry => entry.id))
+
     return NextResponse.json(entries)
   } catch (error) {
+    console.error('💥 Error in GET /entries:', error)
     return NextResponse.json(
       { error: 'Failed to fetch entries' },
       { status: 500 }
@@ -60,8 +79,6 @@ export async function POST(request: NextRequest) {
     const data = await request.json()
 
     // Check if entry already exists for this date/shift/line/hour
-    // Check if entry already exists for this date/shift/line/hour
-    // Check if entry already exists for this date/shift/line/hour
     const existingEntry = await prisma.entry.findFirst({
       where: {
         date: new Date(data.date),
@@ -83,22 +100,42 @@ export async function POST(request: NextRequest) {
         date: new Date(data.date),
         line: data.line,
         shift: data.shift,
-        hour: data.hour, // NEW FIELD
+        hour: data.hour,
         teamLeader: data.teamLeader,
         shiftInCharge: data.shiftInCharge,
         model: data.model,
         operatorNames: data.operatorNames,
         availableTime: data.availableTime,
         lineCapacity: data.lineCapacity,
+        
+        // Updated production type
+        productionType: data.productionType.toUpperCase(),
+        
+        // Handle target fields
         ppcTarget: data.ppcTarget,
+        ppcTargetLH: data.ppcTargetLH,
+        ppcTargetRH: data.ppcTargetRH,
+        
+        // Handle production fields
         goodParts: data.goodParts,
+        goodPartsLH: data.goodPartsLH,
+        goodPartsRH: data.goodPartsRH,
+        
+        // Handle SPD fields
+        spdParts: data.spdParts,
+        spdPartsLH: data.spdPartsLH,
+        spdPartsRH: data.spdPartsRH,
+        
+        // Handle rejection fields
         rejects: data.rejects,
+        rejectsLH: data.rejectsLH,
+        rejectsRH: data.rejectsRH,
+        
         problemHead: data.problemHead,
         description: data.description,
         lossTime: data.lossTime,
         responsibility: data.responsibility,
-        productionType: data.productionType.toUpperCase(), // Ensure uppercase
-        defectType: data.defectType.toUpperCase(), // Ensure uppercase
+        defectType: data.defectType.toUpperCase(),
         newDefectDescription: data.newDefectDescription || null,
         rejectionPhenomena: data.rejectionPhenomena || null,
         rejectionCause: data.rejectionCause || null,
@@ -106,6 +143,8 @@ export async function POST(request: NextRequest) {
         rejectionCount: data.rejectionCount || null,
         submittedById: user.id,
         status: 'PENDING',
+        
+        // ... rest of 4M fields
         has4MChange: data.has4MChange || false,
         manChange: data.manChange || null,
         manReason: data.manReason || null,

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Entry, FormData, FormErrors, Parameters, ShiftInfo } from '@/types'
+import { Entry, FormData, FormErrors, Parameters, ShiftInfo, ShiftData } from '@/types'
 import { getCurrentShift, getCurrentHour, SHIFT_SCHEDULES, getNextHour } from '@/lib/shifts'
 import {
   Factory,
@@ -40,6 +40,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [shiftInfo, setShiftInfo] = useState<ShiftInfo | null>(null)
+  const [shiftData, setShiftData] = useState<ShiftData | null>(null)
 
   const [formData, setFormData] = useState<FormData>({
     date: new Date().toISOString().split('T')[0],
@@ -52,20 +53,41 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     operatorNames: [''],
     availableTime: '',
     lineCapacity: '',
+    
+    // Updated production type
+    productionType: 'LH',
+    
+    // Updated target fields
     ppcTarget: '',
+    ppcTargetLH: '',
+    ppcTargetRH: '',
+    
+    // Updated production fields
     goodParts: '',
+    goodPartsLH: '',
+    goodPartsRH: '',
+    
+    // NEW: SPD fields
+    spdParts: '',
+    spdPartsLH: '',
+    spdPartsRH: '',
+    
+    // Updated rejection fields
     rejects: '',
+    rejectsLH: '',
+    rejectsRH: '',
+    
     problemHead: '',
     description: '',
     lossTime: '',
     responsibility: '',
-    productionType: 'Single',
     defectType: 'Repeat',
     newDefectDescription: '',
     rejectionPhenomena: '',
     rejectionCause: '',
     rejectionCorrectiveAction: '',
     rejectionCount: '',
+    
     // 4M Change tracking
     has4MChange: false,
     manChange: false,
@@ -93,8 +115,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
   useEffect(() => {
     fetchParameters()
     updateShiftInfo()
+    loadShiftData()
 
-    // Update shift info every minute
     const interval = setInterval(updateShiftInfo, 60000)
     return () => clearInterval(interval)
   }, [])
@@ -103,17 +125,78 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     if (isEditing && editingEntry) {
       populateFormForEdit()
     } else {
-      // Set current shift and hour for new entries
       updateShiftInfo()
     }
   }, [isEditing, editingEntry])
+
+  useEffect(() => {
+    if (formData.line && formData.shift && formData.date) {
+      loadShiftData()
+    }
+  }, [formData.line, formData.shift, formData.date])
+
+  // Auto-calculate PPC targets based on production type and line capacity
+  useEffect(() => {
+    if (formData.lineCapacity && formData.productionType) {
+      const capacityStr = formData.lineCapacity.replace(' u/hr', '')
+      const capacity = parseNumber(capacityStr)
+      
+      if (formData.productionType === 'BOTH') {
+        const halfCapacity = Math.floor(capacity / 2)
+        setFormData(prev => ({
+          ...prev,
+          ppcTargetLH: halfCapacity.toString(),
+          ppcTargetRH: halfCapacity.toString(),
+          ppcTarget: capacity.toString()
+        }))
+      } else if (formData.productionType === 'LH') {
+        setFormData(prev => ({
+          ...prev,
+          ppcTargetLH: capacity.toString(),
+          ppcTargetRH: '',
+          ppcTarget: capacity.toString()
+        }))
+      } else if (formData.productionType === 'RH') {
+        setFormData(prev => ({
+          ...prev,
+          ppcTargetLH: '',
+          ppcTargetRH: capacity.toString(),
+          ppcTarget: capacity.toString()
+        }))
+      }
+    }
+  }, [formData.lineCapacity, formData.productionType])
+
+  const loadShiftData = async () => {
+    if (isEditing || !formData.date || !formData.shift || !formData.line) return
+
+    try {
+      const response = await fetch(`/api/entries/shift-data?date=${formData.date}&shift=${formData.shift}&line=${formData.line}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data) {
+          setShiftData(data)
+          // Auto-populate date, line, and operators
+          setFormData(prev => ({
+            ...prev,
+            date: data.date,
+            line: data.line,
+            operatorNames: data.operatorNames
+          }))
+        } else {
+          setShiftData(null)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load shift data:', error)
+    }
+  }
 
   const updateShiftInfo = () => {
     const currentShift = getCurrentShift()
     const currentHour = getCurrentHour(currentShift)
     const nextHour = getNextHour(currentShift, currentHour)
     const shiftConfig = SHIFT_SCHEDULES[currentShift]
-
     const timeRemaining = calculateTimeRemaining(currentHour)
 
     const info: ShiftInfo = {
@@ -126,7 +209,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
 
     setShiftInfo(info)
 
-    // Auto-set shift and hour for new entries
     if (!isEditing) {
       setFormData(prev => ({
         ...prev,
@@ -146,7 +228,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     const endDate = new Date(now)
     endDate.setHours(endHour, endMin, 0, 0)
 
-    // Handle overnight shift
     if (endHour < now.getHours()) {
       endDate.setDate(endDate.getDate() + 1)
     }
@@ -175,14 +256,29 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         operatorNames: editingEntry.operatorNames || [''],
         availableTime: editingEntry.availableTime,
         lineCapacity: editingEntry.lineCapacity,
+        
+        productionType: editingEntry.productionType || 'LH',
+        
         ppcTarget: editingEntry.ppcTarget?.toString() || '',
+        ppcTargetLH: editingEntry.ppcTargetLH?.toString() || '',
+        ppcTargetRH: editingEntry.ppcTargetRH?.toString() || '',
+        
         goodParts: editingEntry.goodParts?.toString() || '',
+        goodPartsLH: editingEntry.goodPartsLH?.toString() || '',
+        goodPartsRH: editingEntry.goodPartsRH?.toString() || '',
+        
+        spdParts: editingEntry.spdParts?.toString() || '',
+        spdPartsLH: editingEntry.spdPartsLH?.toString() || '',
+        spdPartsRH: editingEntry.spdPartsRH?.toString() || '',
+        
         rejects: editingEntry.rejects?.toString() || '',
+        rejectsLH: editingEntry.rejectsLH?.toString() || '',
+        rejectsRH: editingEntry.rejectsRH?.toString() || '',
+        
         problemHead: editingEntry.problemHead,
         description: editingEntry.description,
         lossTime: editingEntry.lossTime?.toString() || '',
         responsibility: editingEntry.responsibility,
-        productionType: editingEntry.productionType || 'Single',
         defectType: editingEntry.defectType || 'Repeat',
         newDefectDescription: editingEntry.newDefectDescription || '',
         rejectionPhenomena: editingEntry.rejectionPhenomena || '',
@@ -190,7 +286,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         rejectionCorrectiveAction: editingEntry.rejectionCorrectiveAction || '',
         rejectionCount: editingEntry.rejectionCount?.toString() || '',
 
-        // 4M Change tracking
         has4MChange: editingEntry.has4MChange || false,
         manChange: editingEntry.manChange || false,
         manReason: editingEntry.manReason || '',
@@ -226,6 +321,257 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     }
   }
 
+  const parseNumber = (value: string): number => {
+    if (value === '') return 0
+    const parsed = parseInt(value)
+    return isNaN(parsed) ? 0 : parsed
+  }
+
+  // Calculate totals based on production type
+  const calculateTotals = () => {
+    if (formData.productionType === 'BOTH') {
+      const goodLH = parseNumber(formData.goodPartsLH)
+      const goodRH = parseNumber(formData.goodPartsRH)
+      const spdLH = parseNumber(formData.spdPartsLH)
+      const spdRH = parseNumber(formData.spdPartsRH)
+      const rejectLH = parseNumber(formData.rejectsLH)
+      const rejectRH = parseNumber(formData.rejectsRH)
+
+      return {
+        totalGood: goodLH + goodRH,
+        totalSpd: spdLH + spdRH,
+        totalRejects: rejectLH + rejectRH,
+        totalProduction: goodLH + goodRH + spdLH + spdRH + rejectLH + rejectRH
+      }
+    } else {
+      const good = parseNumber(formData.goodParts)
+      const spd = parseNumber(formData.spdParts)
+      const rejects = parseNumber(formData.rejects)
+
+      return {
+        totalGood: good,
+        totalSpd: spd,
+        totalRejects: rejects,
+        totalProduction: good + spd + rejects
+      }
+    }
+  }
+
+  const renderProductionFields = () => {
+    const isBoth = formData.productionType === 'BOTH'
+    
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-300 text-sm">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Available Time *</th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Line Capacity *</th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Prod. Type</th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+                PPC Target {isBoth && '(LH/RH)'}
+              </th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+                Good Parts {isBoth && '(LH/RH)'}
+              </th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+                SPD Parts {isBoth && '(LH/RH)'}
+              </th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+                Rejects {isBoth && '(LH/RH)'}
+              </th>
+              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Loss Time</th>
+              
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-gray-300 px-3 py-2">
+                <Select value={formData.availableTime} onValueChange={(value) => updateField('availableTime', value)}>
+                  <SelectTrigger className={`h-8 text-xs ${hasError('availableTime') ? 'border-red-500' : 'border-gray-300'}`}>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parameters.AVAILABLE_TIME?.map((time) => (
+                      <SelectItem key={time} value={time}>{time} min</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.availableTime && <div className="text-xs text-red-600 mt-1">{errors.availableTime}</div>}
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                <Select value={formData.lineCapacity} onValueChange={(value) => updateField('lineCapacity', value)}>
+                  <SelectTrigger className={`h-8 text-xs ${hasError('lineCapacity') ? 'border-red-500' : 'border-gray-300'}`}>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parameters.LINE_CAPACITY?.map((capacity) => (
+                      <SelectItem key={capacity} value={capacity}>{capacity} u/hr</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.lineCapacity && <div className="text-xs text-red-600 mt-1">{errors.lineCapacity}</div>}
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                <Select value={formData.productionType} onValueChange={(value) => updateField('productionType', value as 'LH' | 'RH' | 'BOTH')}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LH">LH</SelectItem>
+                    <SelectItem value="RH">RH</SelectItem>
+                    <SelectItem value="BOTH">LH & RH</SelectItem>
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                {isBoth ? (
+                  <div className="flex space-x-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.ppcTargetLH}
+                      onChange={(e) => updateField('ppcTargetLH', e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      placeholder="LH"
+                      disabled
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.ppcTargetRH}
+                      onChange={(e) => updateField('ppcTargetRH', e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      placeholder="RH"
+                      disabled
+                    />
+                  </div>
+                ) : (
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.ppcTarget}
+                    onChange={(e) => updateField('ppcTarget', e.target.value)}
+                    className="h-8 text-xs"
+                    placeholder="Target"
+                    disabled
+                  />
+                )}
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                {isBoth ? (
+                  <div className="flex space-x-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.goodPartsLH}
+                      onChange={(e) => updateField('goodPartsLH', e.target.value)}
+                      className={`h-8 text-xs flex-1 ${hasError('goodParts') ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="LH"
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.goodPartsRH}
+                      onChange={(e) => updateField('goodPartsRH', e.target.value)}
+                      className={`h-8 text-xs flex-1 ${hasError('goodParts') ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="RH"
+                    />
+                  </div>
+                ) : (
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.goodParts}
+                    onChange={(e) => updateField('goodParts', e.target.value)}
+                    className={`h-8 text-xs ${hasError('goodParts') ? 'border-red-500' : 'border-gray-300'}`}
+                    placeholder="Good"
+                  />
+                )}
+                {errors.goodParts && <div className="text-xs text-red-600 mt-1">{errors.goodParts}</div>}
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                {isBoth ? (
+                  <div className="flex space-x-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.spdPartsLH}
+                      onChange={(e) => updateField('spdPartsLH', e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      placeholder="LH"
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.spdPartsRH}
+                      onChange={(e) => updateField('spdPartsRH', e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      placeholder="RH"
+                    />
+                  </div>
+                ) : (
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.spdParts}
+                    onChange={(e) => updateField('spdParts', e.target.value)}
+                    className="h-8 text-xs"
+                    placeholder="SPD"
+                  />
+                )}
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                {isBoth ? (
+                  <div className="flex space-x-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.rejectsLH}
+                      onChange={(e) => updateField('rejectsLH', e.target.value)}
+                      className={`h-8 text-xs flex-1 ${hasError('rejects') ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="LH"
+                    />
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.rejectsRH}
+                      onChange={(e) => updateField('rejectsRH', e.target.value)}
+                      className={`h-8 text-xs flex-1 ${hasError('rejects') ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="RH"
+                    />
+                  </div>
+                ) : (
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.rejects}
+                    onChange={(e) => updateField('rejects', e.target.value)}
+                    className={`h-8 text-xs ${hasError('rejects') ? 'border-red-500' : 'border-gray-300'}`}
+                    placeholder="Rejects"
+                  />
+                )}
+                {errors.rejects && <div className="text-xs text-red-600 mt-1">{errors.rejects}</div>}
+              </td>
+              <td className="border border-gray-300 px-3 py-2">
+                <Input
+                  type="number"
+                  min="0"
+                  value={formData.lossTime}
+                  onChange={(e) => updateField('lossTime', e.target.value)}
+                  className={`h-8 text-xs ${hasError('lossTime') ? 'border-red-500' : 'border-gray-300'}`}
+                  placeholder="Minutes"
+                />
+                {errors.lossTime && <div className="text-xs text-red-600 mt-1">{errors.lossTime}</div>}
+              </td>
+              
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
   const addOperator = () => {
     if (formData.operatorNames.length < 8) {
       setFormData(prev => ({
@@ -251,12 +597,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     }))
   }
 
-  const parseNumber = (value: string): number => {
-    if (value === '') return 0
-    const parsed = parseInt(value)
-    return isNaN(parsed) ? 0 : parsed
-  }
-
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
 
@@ -278,30 +618,30 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     const validOperators = formData.operatorNames.filter(name => name.trim() !== '')
     if (validOperators.length === 0) newErrors.operators = 'At least one operator name is required'
 
-    // Numeric validation
-    const ppcTarget = parseNumber(formData.ppcTarget)
-    const goodParts = parseNumber(formData.goodParts)
-    const rejects = parseNumber(formData.rejects)
-    const lossTime = parseNumber(formData.lossTime)
-    const rejectionCount = parseNumber(formData.rejectionCount)
-
-    if (formData.ppcTarget !== '' && ppcTarget < 0) newErrors.ppcTarget = 'Cannot be negative'
-    if (formData.goodParts !== '' && goodParts < 0) newErrors.goodParts = 'Cannot be negative'
-    if (formData.rejects !== '' && rejects < 0) newErrors.rejects = 'Cannot be negative'
-    if (formData.lossTime !== '' && lossTime < 0) newErrors.lossTime = 'Cannot be negative'
-
-    // Business logic validation
-    const totalParts = goodParts + rejects
-    if (formData.goodParts !== '' && formData.rejects !== '' && totalParts === 0) {
-      newErrors.goodParts = 'Total production must be > 0'
+    // Production type specific validation
+    const totals = calculateTotals()
+    
+    if (totals.totalProduction === 0) {
+      newErrors.production = 'Total production must be > 0'
     }
 
-    if (rejects > 0) {
+    // Numeric validation
+    const lossTime = parseNumber(formData.lossTime)
+    if (formData.lossTime !== '' && lossTime < 0) newErrors.lossTime = 'Cannot be negative'
+
+    // Rejection validation
+    if (totals.totalRejects > 0) {
       if (!formData.rejectionPhenomena.trim()) newErrors.rejectionPhenomena = 'Required when rejects > 0'
       if (!formData.rejectionCause.trim()) newErrors.rejectionCause = 'Required when rejects > 0'
       if (!formData.rejectionCorrectiveAction.trim()) newErrors.rejectionCorrectiveAction = 'Required when rejects > 0'
-      if (formData.rejectionCount === '' || rejectionCount <= 0) newErrors.rejectionCount = 'Must be > 0 when rejects exist'
-      if (rejectionCount > rejects) newErrors.rejectionCount = 'Cannot exceed total rejects'
+      
+      const rejectionCount = parseNumber(formData.rejectionCount)
+      if (formData.rejectionCount === '' || rejectionCount <= 0) {
+        newErrors.rejectionCount = 'Must be > 0 when rejects exist'
+      }
+      if (rejectionCount > totals.totalRejects) {
+        newErrors.rejectionCount = 'Cannot exceed total rejects'
+      }
     }
 
     // New defect validation
@@ -340,12 +680,42 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     setSubmitStatus('idle')
 
     try {
+      const totals = calculateTotals()
+      
       const submitData = {
         ...formData,
         operatorNames: formData.operatorNames.filter(name => name.trim() !== ''),
-        ppcTarget: parseNumber(formData.ppcTarget),
-        goodParts: parseNumber(formData.goodParts),
-        rejects: parseNumber(formData.rejects),
+        
+        // Handle production type specific data
+        ...(formData.productionType === 'BOTH' ? {
+          ppcTargetLH: parseNumber(formData.ppcTargetLH),
+          ppcTargetRH: parseNumber(formData.ppcTargetRH),
+          ppcTarget: parseNumber(formData.ppcTargetLH) + parseNumber(formData.ppcTargetRH),
+          goodPartsLH: parseNumber(formData.goodPartsLH),
+          goodPartsRH: parseNumber(formData.goodPartsRH),
+          goodParts: totals.totalGood,
+          spdPartsLH: parseNumber(formData.spdPartsLH),
+          spdPartsRH: parseNumber(formData.spdPartsRH),
+          spdParts: totals.totalSpd,
+          rejectsLH: parseNumber(formData.rejectsLH),
+          rejectsRH: parseNumber(formData.rejectsRH),
+          rejects: totals.totalRejects,
+        } : {
+          ppcTarget: parseNumber(formData.ppcTarget),
+          goodParts: parseNumber(formData.goodParts),
+          spdParts: parseNumber(formData.spdParts),
+          rejects: parseNumber(formData.rejects),
+          // Clear LH/RH specific fields for single production
+          ppcTargetLH: null,
+          ppcTargetRH: null,
+          goodPartsLH: null,
+          goodPartsRH: null,
+          spdPartsLH: null,
+          spdPartsRH: null,
+          rejectsLH: null,
+          rejectsRH: null,
+        }),
+        
         lossTime: parseNumber(formData.lossTime),
         rejectionCount: parseNumber(formData.rejectionCount)
       }
@@ -361,7 +731,9 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
 
       if (response.ok) {
         setSubmitStatus('success')
-        if (!isEditing) resetForm()
+        if (!isEditing) {
+          resetForm()
+        }
         onSuccess?.()
       } else {
         const errorData = await response.json()
@@ -383,31 +755,39 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     const currentHour = getCurrentHour(currentShift)
 
     setFormData({
-      date: new Date().toISOString().split('T')[0],
-      line: '',
+      date: shiftData?.date || new Date().toISOString().split('T')[0],
+      line: shiftData?.line || '',
       shift: currentShift,
       hour: currentHour,
       teamLeader: '',
       shiftInCharge: '',
       model: '',
-      operatorNames: [''],
+      operatorNames: shiftData?.operatorNames || [''],
       availableTime: '',
       lineCapacity: '',
+      productionType: 'LH',
       ppcTarget: '',
+      ppcTargetLH: '',
+      ppcTargetRH: '',
       goodParts: '',
+      goodPartsLH: '',
+      goodPartsRH: '',
+      spdParts: '',
+      spdPartsLH: '',
+      spdPartsRH: '',
       rejects: '',
+      rejectsLH: '',
+      rejectsRH: '',
       problemHead: '',
       description: '',
       lossTime: '',
       responsibility: '',
-      productionType: 'Single',
       defectType: 'Repeat',
       newDefectDescription: '',
       rejectionPhenomena: '',
       rejectionCause: '',
       rejectionCorrectiveAction: '',
       rejectionCount: '',
-      // 4M Change tracking
       has4MChange: false,
       manChange: false,
       manReason: '',
@@ -485,6 +865,20 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         </CardHeader>
 
         <CardContent className="p-6">
+          {/* Shift Data Alert - Show when shift data is loaded */}
+          {shiftData && !isEditing && (
+            <Alert className="mb-6 border-green-300 bg-green-50">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                <div className="font-medium">Shift data loaded</div>
+                <div className="text-sm">
+                  Date: <strong>{shiftData.date}</strong> | Line: <strong>{shiftData.line}</strong> | 
+                  Operators: <strong>{shiftData.operatorNames.join(', ')}</strong>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Current Shift Alert */}
           {shiftInfo && !isEditing && (
             <Alert className="mb-6 border-blue-300 bg-blue-50">
@@ -526,7 +920,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Information */}
+            {/* Basic Information - Date/Line/Operators locked after first entry */}
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-300 text-sm">
                 <thead>
@@ -549,11 +943,19 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                         onChange={(e) => updateField('date', e.target.value)}
                         className={`h-8 text-xs ${hasError('date') ? 'border-red-500' : 'border-gray-300'}`}
                         max={new Date().toISOString().split('T')[0]}
+                        disabled={!!shiftData && !isEditing}
                       />
                       {errors.date && <div className="text-xs text-red-600 mt-1">{errors.date}</div>}
+                      {!!shiftData && !isEditing && (
+                        <div className="text-xs text-gray-500 mt-1">Locked for shift</div>
+                      )}
                     </td>
                     <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.line} onValueChange={(value) => updateField('line', value)}>
+                      <Select 
+                        value={formData.line} 
+                        onValueChange={(value) => updateField('line', value)}
+                        disabled={!!shiftData && !isEditing}
+                      >
                         <SelectTrigger className={`h-8 text-xs ${hasError('line') ? 'border-red-500' : 'border-gray-300'}`}>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
@@ -564,17 +966,19 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                         </SelectContent>
                       </Select>
                       {errors.line && <div className="text-xs text-red-600 mt-1">{errors.line}</div>}
+                      {!!shiftData && !isEditing && (
+                        <div className="text-xs text-gray-500 mt-1">Locked for shift</div>
+                      )}
                     </td>
                     <td className="border border-gray-300 px-3 py-2">
                       <Select
                         value={formData.shift}
                         onValueChange={(value) => {
                           updateField('shift', value)
-                          // Auto-update hour when shift changes
                           const newCurrentHour = getCurrentHour(value)
                           updateField('hour', newCurrentHour)
                         }}
-                        disabled={!isEditing} // Lock for new entries
+                        disabled={!isEditing}
                       >
                         <SelectTrigger className={`h-8 text-xs ${hasError('shift') ? 'border-red-500' : 'border-gray-300'}`}>
                           <SelectValue placeholder="Select" />
@@ -593,7 +997,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                       <Select
                         value={formData.hour}
                         onValueChange={(value) => updateField('hour', value)}
-                      // disabled={!isEditing && !!shiftInfo} // Lock for new entries to current hour
                       >
                         <SelectTrigger className={`h-8 text-xs ${hasError('hour') ? 'border-red-500' : 'border-gray-300'}`}>
                           <SelectValue placeholder="Select" />
@@ -652,105 +1055,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               </table>
             </div>
 
-            {/* Production Metrics */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-sm">
-                <thead>
-                  <tr>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Available Time *</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Line Capacity *</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">PPC Target</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Good Parts</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejects</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Loss Time</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Prod. Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.availableTime} onValueChange={(value) => updateField('availableTime', value)}>
-                        <SelectTrigger className={`h-8 text-xs ${hasError('availableTime') ? 'border-red-500' : 'border-gray-300'}`}>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parameters.AVAILABLE_TIME?.map((time) => (
-                            <SelectItem key={time} value={time}>{time} min</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.availableTime && <div className="text-xs text-red-600 mt-1">{errors.availableTime}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.lineCapacity} onValueChange={(value) => updateField('lineCapacity', value)}>
-                        <SelectTrigger className={`h-8 text-xs ${hasError('lineCapacity') ? 'border-red-500' : 'border-gray-300'}`}>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parameters.LINE_CAPACITY?.map((capacity) => (
-                            <SelectItem key={capacity} value={capacity}>{capacity} u/hr</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.lineCapacity && <div className="text-xs text-red-600 mt-1">{errors.lineCapacity}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.ppcTarget}
-                        onChange={(e) => updateField('ppcTarget', e.target.value)}
-                        className={`h-8 text-xs ${hasError('ppcTarget') ? 'border-red-500' : 'border-gray-300'}`}
-                        placeholder="Target"
-                      />
-                      {errors.ppcTarget && <div className="text-xs text-red-600 mt-1">{errors.ppcTarget}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.goodParts}
-                        onChange={(e) => updateField('goodParts', e.target.value)}
-                        className={`h-8 text-xs ${hasError('goodParts') ? 'border-red-500' : 'border-gray-300'}`}
-                        placeholder="Good"
-                      />
-                      {errors.goodParts && <div className="text-xs text-red-600 mt-1">{errors.goodParts}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.rejects}
-                        onChange={(e) => updateField('rejects', e.target.value)}
-                        className={`h-8 text-xs ${hasError('rejects') ? 'border-red-500' : 'border-gray-300'}`}
-                        placeholder="Rejects"
-                      />
-                      {errors.rejects && <div className="text-xs text-red-600 mt-1">{errors.rejects}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.lossTime}
-                        onChange={(e) => updateField('lossTime', e.target.value)}
-                        className={`h-8 text-xs ${hasError('lossTime') ? 'border-red-500' : 'border-gray-300'}`}
-                        placeholder="Minutes"
-                      />
-                      {errors.lossTime && <div className="textxs text-red-600 mt-1">{errors.lossTime}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={formData.productionType === 'Sets'}
-                          onCheckedChange={(checked) => updateField('productionType', checked ? 'Sets' : 'Single')}
-                        />
-                        <span className="text-xs font-medium">{formData.productionType}</span>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            {/* Production Metrics with new structure */}
+            {renderProductionFields()}
 
             {/* Problem Analysis with Defect Type */}
             <div className="overflow-x-auto">
@@ -834,68 +1140,74 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               </div>
             )}
 
-            {/* Rejection Details - Only show if rejects > 0 */}
-            {parseNumber(formData.rejects) > 0 && (
-              <div className="space-y-4">
-                <Label className="text-sm font-semibold">Rejection Details</Label>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300 text-sm">
-                    <thead>
-                      <tr>
-                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Phenomena *</th>
-                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Cause *</th>
-                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Corrective Action *</th>
-                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Count *</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="border border-gray-300 px-3 py-2">
-                          <Input
-                            value={formData.rejectionPhenomena}
-                            onChange={(e) => updateField('rejectionPhenomena', e.target.value)}
-                            placeholder="Describe phenomena"
-                            className={`h-8 text-xs ${hasError('rejectionPhenomena') ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {errors.rejectionPhenomena && <div className="text-xs text-red-600 mt-1">{errors.rejectionPhenomena}</div>}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2">
-                          <Input
-                            value={formData.rejectionCause}
-                            onChange={(e) => updateField('rejectionCause', e.target.value)}
-                            placeholder="Root cause"
-                            className={`h-8 text-xs ${hasError('rejectionCause') ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {errors.rejectionCause && <div className="text-xs text-red-600 mt-1">{errors.rejectionCause}</div>}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2">
-                          <Input
-                            value={formData.rejectionCorrectiveAction}
-                            onChange={(e) => updateField('rejectionCorrectiveAction', e.target.value)}
-                            placeholder="Corrective action"
-                            className={`h-8 text-xs ${hasError('rejectionCorrectiveAction') ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {errors.rejectionCorrectiveAction && <div className="text-xs text-red-600 mt-1">{errors.rejectionCorrectiveAction}</div>}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            max={parseNumber(formData.rejects)}
-                            value={formData.rejectionCount}
-                            onChange={(e) => updateField('rejectionCount', e.target.value)}
-                            placeholder="Count"
-                            className={`h-8 text-xs ${hasError('rejectionCount') ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          <div className="text-xs text-gray-500 mt-1">Max: {parseNumber(formData.rejects)}</div>
-                          {errors.rejectionCount && <div className="text-xs text-red-600 mt-1">{errors.rejectionCount}</div>}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            {/* Rejection Details - Only show if total rejects > 0 */}
+            {(() => {
+              const totals = calculateTotals()
+              if (totals.totalRejects > 0) {
+                return (
+                  <div className="space-y-4">
+                    <Label className="text-sm font-semibold">Rejection Details</Label>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-300 text-sm">
+                        <thead>
+                          <tr>
+                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Phenomena *</th>
+                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Cause *</th>
+                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Corrective Action *</th>
+                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Count *</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="border border-gray-300 px-3 py-2">
+                              <Input
+                                value={formData.rejectionPhenomena}
+                                onChange={(e) => updateField('rejectionPhenomena', e.target.value)}
+                                placeholder="Describe phenomena"
+                                className={`h-8 text-xs ${hasError('rejectionPhenomena') ? 'border-red-500' : 'border-gray-300'}`}
+                              />
+                              {errors.rejectionPhenomena && <div className="text-xs text-red-600 mt-1">{errors.rejectionPhenomena}</div>}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2">
+                              <Input
+                                value={formData.rejectionCause}
+                                onChange={(e) => updateField('rejectionCause', e.target.value)}
+                                placeholder="Root cause"
+                                className={`h-8 text-xs ${hasError('rejectionCause') ? 'border-red-500' : 'border-gray-300'}`}
+                              />
+                              {errors.rejectionCause && <div className="text-xs text-red-600 mt-1">{errors.rejectionCause}</div>}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2">
+                              <Input
+                                value={formData.rejectionCorrectiveAction}
+                                onChange={(e) => updateField('rejectionCorrectiveAction', e.target.value)}
+                                placeholder="Corrective action"
+                                className={`h-8 text-xs ${hasError('rejectionCorrectiveAction') ? 'border-red-500' : 'border-gray-300'}`}
+                              />
+                              {errors.rejectionCorrectiveAction && <div className="text-xs text-red-600 mt-1">{errors.rejectionCorrectiveAction}</div>}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                max={totals.totalRejects}
+                                value={formData.rejectionCount}
+                                onChange={(e) => updateField('rejectionCount', e.target.value)}
+                                placeholder="Count"
+                                className={`h-8 text-xs ${hasError('rejectionCount') ? 'border-red-500' : 'border-gray-300'}`}
+                              />
+                              <div className="text-xs text-gray-500 mt-1">Max: {totals.totalRejects}</div>
+                              {errors.rejectionCount && <div className="text-xs text-red-600 mt-1">{errors.rejectionCount}</div>}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              }
+              return null
+            })()}
 
             {/* 4M Change Management */}
             <div className="space-y-4">
@@ -1053,7 +1365,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                           <Input
                             value={formData.machineSC}
                             onChange={(e) => updateField('machineSC', e.target.value)}
-                            placeholder={formData.machineSC ? "SC details" : "No change"}
+                            placeholder={formData.machineChange ? "SC details" : "No change"}
                             className="h-8 text-xs"
                             disabled={!formData.machineChange}
                           />
@@ -1192,12 +1504,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               )}
             </div>
 
-
-
-
-
-
-            {/* Operators Section - Vertical List */}
+            {/* Operators Section - Locked after first entry */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">
@@ -1205,11 +1512,14 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                   <Badge variant="outline" className="ml-2 text-xs">
                     {formData.operatorNames.filter(name => name.trim()).length}/8
                   </Badge>
+                  {!!shiftData && !isEditing && (
+                    <Badge variant="secondary" className="ml-2 text-xs">Locked for shift</Badge>
+                  )}
                 </Label>
                 <Button
                   type="button"
                   onClick={addOperator}
-                  disabled={formData.operatorNames.length >= 8}
+                  disabled={formData.operatorNames.length >= 8 || (!!shiftData && !isEditing)}
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
@@ -1240,10 +1550,11 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                             onChange={(e) => updateOperatorName(index, e.target.value)}
                             placeholder={`Operator ${index + 1} name`}
                             className="h-8 text-xs"
+                            disabled={!!shiftData && !isEditing}
                           />
                         </td>
                         <td className="border border-gray-300 px-3 py-2 text-center">
-                          {formData.operatorNames.length > 1 && (
+                          {formData.operatorNames.length > 1 && (!shiftData || isEditing) && (
                             <Button
                               type="button"
                               onClick={() => removeOperator(index)}
@@ -1269,89 +1580,115 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               </div>
             </div>
 
-            {/* Production Summary */}
-            {/* Production Summary with OEE */}
-            {(parseNumber(formData.goodParts) > 0 || parseNumber(formData.rejects) > 0) && (
-              <div className="mt-6">
-                <Label className="text-sm font-semibold mb-2 block">Production Summary & OEE Analysis</Label>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300 text-sm">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total Production</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Efficiency %</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Target Achievement %</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Availability %</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Performance %</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Quality %</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center font-semibold">OEE %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="border border-gray-300 px-4 py-3 text-center">
-                          <div className="text-lg font-bold">{(parseNumber(formData.goodParts) + parseNumber(formData.rejects)).toLocaleString()}</div>
-                          <div className="text-xs text-gray-600">Units</div>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3 text-center">
-                          <div className="text-lg font-bold">
-                            {parseNumber(formData.goodParts) + parseNumber(formData.rejects) > 0
-                              ? Math.round((parseNumber(formData.goodParts) / (parseNumber(formData.goodParts) + parseNumber(formData.rejects))) * 100)
-                              : 0}%
+            {/* Production Summary with updated calculations */}
+            {(() => {
+              const totals = calculateTotals()
+              if (totals.totalProduction > 0) {
+                return (
+                  <div className="mt-6">
+                    <Label className="text-sm font-semibold mb-2 block">Production Summary & Performance Analysis</Label>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-300 text-sm">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total Good</th>
+                            <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total SPD</th>
+                            <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total Rejects</th>
+                            <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Total Production</th>
+                            <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Efficiency %</th>
+                            <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Target Achievement %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="border border-gray-300 px-4 py-3 text-center">
+                              <div className="text-lg font-bold text-green-600">{totals.totalGood.toLocaleString()}</div>
+                              {formData.productionType === 'BOTH' && (
+                                <div className="text-xs text-gray-600">
+                                  LH: {parseNumber(formData.goodPartsLH)} | RH: {parseNumber(formData.goodPartsRH)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3 text-center">
+                              <div className="text-lg font-bold text-blue-600">{totals.totalSpd.toLocaleString()}</div>
+                              {formData.productionType === 'BOTH' && (
+                                <div className="text-xs text-gray-600">
+                                  LH: {parseNumber(formData.spdPartsLH)} | RH: {parseNumber(formData.spdPartsRH)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3 text-center">
+                              <div className="text-lg font-bold text-red-600">{totals.totalRejects.toLocaleString()}</div>
+                              {formData.productionType === 'BOTH' && (
+                                <div className="text-xs text-gray-600">
+                                  LH: {parseNumber(formData.rejectsLH)} | RH: {parseNumber(formData.rejectsRH)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3 text-center">
+                              <div className="text-xl font-bold">{totals.totalProduction.toLocaleString()}</div>
+                              <div className="text-xs text-gray-600">Units</div>
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3 text-center">
+                              <div className="text-lg font-bold">
+                                {Math.round(((totals.totalGood + totals.totalSpd) / totals.totalProduction) * 100)}%
+                              </div>
+                              <div className="text-xs text-gray-600">Good + SPD / Total</div>
+                            </td>
+                            <td className="border border-gray-300 px-4 py-3 text-center">
+                              <div className="text-lg font-bold">
+                                {parseNumber(formData.ppcTarget) > 0
+                                  ? Math.round((totals.totalProduction / parseNumber(formData.ppcTarget)) * 100)
+                                  : 0}%
+                              </div>
+                              <div className="text-xs text-gray-600">Actual / Target</div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* Production Type Summary */}
+                    {formData.productionType === 'BOTH' && (
+                      <div className="mt-4 grid grid-cols-2 gap-4">
+                        <div className="bg-blue-50 p-4 rounded border">
+                          <h4 className="font-semibold text-blue-800 mb-2">LH Production</h4>
+                          <div className="text-sm space-y-1">
+                            <div>Good: <span className="font-medium">{parseNumber(formData.goodPartsLH)}</span></div>
+                            <div>SPD: <span className="font-medium">{parseNumber(formData.spdPartsLH)}</span></div>
+                            <div>Rejects: <span className="font-medium">{parseNumber(formData.rejectsLH)}</span></div>
+                            <div className="border-t pt-1">Total: <span className="font-bold">{parseNumber(formData.goodPartsLH) + parseNumber(formData.spdPartsLH) + parseNumber(formData.rejectsLH)}</span></div>
                           </div>
-                          <div className="text-xs text-gray-600">Good / Total</div>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3 text-center">
-                          <div className="text-lg font-bold">
-                            {parseNumber(formData.ppcTarget) > 0
-                              ? Math.round(((parseNumber(formData.goodParts) + parseNumber(formData.rejects)) / parseNumber(formData.ppcTarget)) * 100)
-                              : 0}%
+                        </div>
+                        <div className="bg-green-50 p-4 rounded border">
+                          <h4 className="font-semibold text-green-800 mb-2">RH Production</h4>
+                          <div className="text-sm space-y-1">
+                            <div>Good: <span className="font-medium">{parseNumber(formData.goodPartsRH)}</span></div>
+                            <div>SPD: <span className="font-medium">{parseNumber(formData.spdPartsRH)}</span></div>
+                            <div>Rejects: <span className="font-medium">{parseNumber(formData.rejectsRH)}</span></div>
+                            <div className="border-t pt-1">Total: <span className="font-bold">{parseNumber(formData.goodPartsRH) + parseNumber(formData.spdPartsRH) + parseNumber(formData.rejectsRH)}</span></div>
                           </div>
-                          <div className="text-xs text-gray-600">Actual / Target</div>
-                        </td>
-                        {(() => {
-                          const oeeData = calculateOEE(
-                            formData.availableTime || "0",
-                            parseNumber(formData.lossTime),
-                            formData.lineCapacity || "0",
-                            parseNumber(formData.goodParts),
-                            parseNumber(formData.rejects)
-                          )
-                          const category = getOEECategory(oeeData.oee)
-
-                          return (
-                            <>
-                              <td className="border border-gray-300 px-4 py-3 text-center">
-                                <div className="text-lg font-bold">{oeeData.availability}%</div>
-                                <div className="text-xs text-gray-600">Operating / Planned</div>
-                              </td>
-                              <td className="border border-gray-300 px-4 py-3 text-center">
-                                <div className="text-lg font-bold">{oeeData.performance}%</div>
-                                <div className="text-xs text-gray-600">Actual / Ideal Rate</div>
-                              </td>
-                              <td className="border border-gray-300 px-4 py-3 text-center">
-                                <div className="text-lg font-bold">{oeeData.quality}%</div>
-                                <div className="text-xs text-gray-600">Good / Total</div>
-                              </td>
-                              <td className="border border-gray-300 px-4 py-3 text-center">
-                                <div className={`text-xl font-bold ${category.color}`}>{oeeData.oee}%</div>
-                                <div className="text-xs text-gray-600">{category.category}</div>
-                              </td>
-                            </>
-                          )
-                        })()}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              return null
+            })()}
 
             {/* General Error */}
             {errors.general && (
               <Alert className="border-red-300 mt-6">
                 <AlertTriangle className="h-4 w-4 text-red-600" />
                 <AlertDescription className="text-red-800">{errors.general}</AlertDescription>
+              </Alert>
+            )}
+
+            {errors.production && (
+              <Alert className="border-red-300 mt-6">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">{errors.production}</AlertDescription>
               </Alert>
             )}
 

@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getUserFromToken(token)
-    if (!user || user.role !== 'TEAM_LEADER') {
+    if (!user || user.role !== 'TEAM_LEADER')  {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

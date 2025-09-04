@@ -458,8 +458,8 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Defect Name</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Phenomena</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Cause</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left font-bold">Start Loss Time</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left font-bold">End Loss Time</th>
+                      {/* <th className="border border-gray-300 px-3 py-2 text-left font-bold">Start Loss Time</th> */}
+                      {/* <th className="border border-gray-300 px-3 py-2 text-left font-bold">End Loss Time</th> */}
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Corrective Action</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Count</th>
                     </tr>
@@ -475,7 +475,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                       <td className="border border-gray-300 px-3 py-2 font-medium">
                         {rejection.rejectionCause || 'Not specified'}
                       </td>
-                      <td className="border border-gray-300 px-3 py-2 font-medium">
+                      {/* <td className="border border-gray-300 px-3 py-2 font-medium">
                         <Badge variant="outline" className="font-mono">
                           {rejection.startLossTime || 'Not specified'}
                         </Badge>
@@ -484,7 +484,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                         <Badge variant="outline" className="font-mono">
                           {rejection.endLossTime || 'Not specified'}
                         </Badge>
-                      </td>
+                      </td> */}
                       <td className="border border-gray-300 px-3 py-2 font-medium">
                         {rejection.correctiveAction || 'Not specified'}
                       </td>

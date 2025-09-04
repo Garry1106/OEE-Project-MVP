@@ -668,8 +668,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
       if (!rejection.defectName.trim()) newErrors[`rejection_${index}_defectName`] = 'Defect name required'
       if (!rejection.rejectionPhenomena.trim()) newErrors[`rejection_${index}_phenomena`] = 'Phenomena required'
       if (!rejection.rejectionCause.trim()) newErrors[`rejection_${index}_cause`] = 'Cause required'
-      if (!rejection.startLossTime.trim()) newErrors[`rejection_${index}_startTime`] = 'Start time required'
-      if (!rejection.endLossTime.trim()) newErrors[`rejection_${index}_endTime`] = 'End time required'
+      // if (!rejection.startLossTime.trim()) newErrors[`rejection_${index}_startTime`] = 'Start time required'
+      // if (!rejection.endLossTime.trim()) newErrors[`rejection_${index}_endTime`] = 'End time required'
       if (!rejection.correctiveAction.trim()) newErrors[`rejection_${index}_action`] = 'Action required'
       if (rejection.rejectionCount <= 0) newErrors[`rejection_${index}_count`] = 'Count must be > 0'
     })
@@ -1267,9 +1267,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                                 <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Defect Name *</th>
                                 <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Phenomena *</th>
                                 <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Cause *</th>
-                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Start Loss Time *</th>
+                                
                                 <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Corrective Action *</th>
-                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">End Loss Time *</th>
                                 <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Count *</th>
                               </tr>
                             </thead>
@@ -1302,15 +1301,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                                   />
                                   {errors[`rejection_${index}_cause`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_cause`]}</div>}
                                 </td>
-                                <td className="border border-gray-300 px-3 py-2">
-                                  <Input
-                                    type="time"
-                                    value={rejection.startLossTime}
-                                    onChange={(e) => updateRejectionDetail(rejection.id, 'startLossTime', e.target.value)}
-                                    className={`h-8 text-xs ${hasError(`rejection_${index}_startTime`) ? 'border-red-500' : 'border-gray-300'}`}
-                                  />
-                                  {errors[`rejection_${index}_startTime`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_startTime`]}</div>}
-                                </td>
+                                
                                 <td className="border border-gray-300 px-3 py-2">
                                   <Input
                                     value={rejection.correctiveAction}
@@ -1320,15 +1311,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                                   />
                                   {errors[`rejection_${index}_action`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_action`]}</div>}
                                 </td>
-                                <td className="border border-gray-300 px-3 py-2">
-                                  <Input
-                                    type="time"
-                                    value={rejection.endLossTime}
-                                    onChange={(e) => updateRejectionDetail(rejection.id, 'endLossTime', e.target.value)}
-                                    className={`h-8 text-xs ${hasError(`rejection_${index}_endTime`) ? 'border-red-500' : 'border-gray-300'}`}
-                                  />
-                                  {errors[`rejection_${index}_endTime`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_endTime`]}</div>}
-                                </td>
+                                
                                 
                                 <td className="border border-gray-300 px-3 py-2">
                                   <Input

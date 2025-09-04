@@ -57,7 +57,7 @@ export async function PUT(
     }
 
     const user = await getUserFromToken(token)
-    if (!user || user.role !== 'TEAM_LEADER') {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -72,14 +72,21 @@ export async function PUT(
       return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
     }
 
-    // Check permissions
-    if (entry.submittedById !== user.id) {
+    // Check permissions based on role
+    if (user.role === 'TEAM_LEADER') {
+      // Team leaders can only edit their own entries
+      if (entry.submittedById !== user.id) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      }
+      // Team leaders can only edit pending entries
+      if (entry.status !== 'PENDING') {
+        return NextResponse.json({ error: 'Can only edit pending entries' }, { status: 400 })
+      }
+    } else if (user.role === 'SUPERVISOR') {
+      // Supervisors and admins can edit any entry
+      // No additional restrictions
+    } else {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
-
-    // Team leaders can only edit pending entries
-    if (entry.status !== 'PENDING') {
-      return NextResponse.json({ error: 'Can only edit pending entries' }, { status: 400 })
     }
 
     const data = await request.json()

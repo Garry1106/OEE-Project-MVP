@@ -20,28 +20,70 @@ export async function PATCH(
     // Await the params Promise
     const { id } = await params
 
+    // Check if entry exists
+    const existingEntry = await prisma.entry.findUnique({
+      where: { id }
+    })
+
+    if (!existingEntry) {
+      return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+    }
+
+    // Check if entry is already processed
+    if (existingEntry.status !== 'PENDING') {
+      return NextResponse.json(
+        { error: 'Entry has already been processed' },
+        { status: 400 }
+      )
+    }
+
     const { status, rejectionReason } = await request.json()
+    
+    // Validate status
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      return NextResponse.json(
+        { error: 'Invalid status. Must be APPROVED or REJECTED' },
+        { status: 400 }
+      )
+    }
+
+    // Validate rejection reason if rejecting
+    if (status === 'REJECTED' && (!rejectionReason || rejectionReason.trim() === '')) {
+      return NextResponse.json(
+        { error: 'Rejection reason is required when rejecting an entry' },
+        { status: 400 }
+      )
+    }
     
     const updateData: any = {
       status: status as 'APPROVED' | 'REJECTED',
-      approvedById: user.id,
+      approvedBy: {
+        connect: { id: user.id }
+      },
       updatedAt: new Date()
     }
 
-    // Add rejection reason if status is REJECTED
-    if (status === 'REJECTED' && rejectionReason) {
-      updateData.rejectionReason = rejectionReason
-    }
+    // For now, we'll skip the rejectionReason field since it doesn't exist in the schema
+    // If you want to add it, you'll need to update the Prisma schema first
+    // if (status === 'REJECTED' && rejectionReason) {
+    //   updateData.rejectionReason = rejectionReason.trim()
+    // }
     
     const entry = await prisma.entry.update({
       where: { id },
-      data: updateData
+      data: updateData,
+      include: {
+        submittedBy: { select: { name: true, email: true } },
+        approvedBy: { select: { name: true, email: true } }
+      }
     })
 
     return NextResponse.json(entry)
   } catch (error) {
+    console.error('Entry approval error:', error)
+    
     return NextResponse.json(
-      { error: 'Failed to update entry' },
+      { error: 'Failed to update entry status' },
       { status: 500 }
     )
   }

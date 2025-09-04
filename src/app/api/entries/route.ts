@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
         shiftInCharge: data.shiftInCharge,
         model: data.model,
         operatorNames: data.operatorNames,
+        stationNames: data.stationNames || [], // NEW: Station names
         availableTime: data.availableTime,
         lineCapacity: data.lineCapacity,
         
@@ -131,20 +132,22 @@ export async function POST(request: NextRequest) {
         rejectsLH: data.rejectsLH,
         rejectsRH: data.rejectsRH,
         
+        // Loss Time section (formerly Problem Head)
         problemHead: data.problemHead,
-        description: data.description,
+        description: data.description, // Now text input
         lossTime: data.lossTime,
         responsibility: data.responsibility,
         defectType: data.defectType.toUpperCase(),
         newDefectDescription: data.newDefectDescription || null,
-        rejectionPhenomena: data.rejectionPhenomena || null,
-        rejectionCause: data.rejectionCause || null,
-        rejectionCorrectiveAction: data.rejectionCorrectiveAction || null,
-        rejectionCount: data.rejectionCount || null,
+        newDefectCorrectiveAction: data.newDefectCorrectiveAction || null, // NEW
+        
+        // Multiple rejection details stored as JSON
+        rejectionDetails: data.rejectionDetails || [], // NEW: Array of rejection objects
+        
         submittedById: user.id,
         status: 'PENDING',
         
-        // ... rest of 4M fields
+        // 4M Change Management fields
         has4MChange: data.has4MChange || false,
         manChange: data.manChange || null,
         manReason: data.manReason || null,

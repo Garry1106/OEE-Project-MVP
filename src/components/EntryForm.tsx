@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Entry, FormData, FormErrors, Parameters, ShiftInfo, ShiftData } from '@/types'
+import { Entry, FormData, FormErrors, Parameters, ShiftInfo, ShiftData, RejectionDetail } from '@/types'
 import { getCurrentShift, getCurrentHour, SHIFT_SCHEDULES, getNextHour } from '@/lib/shifts'
 import {
   Factory,
@@ -22,9 +22,9 @@ import {
   RotateCcw,
   X,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react'
-import { calculateOEE, getOEECategory } from '@/lib/oee'
 
 interface EntryFormProps {
   onSuccess?: () => void
@@ -51,6 +51,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     shiftInCharge: '',
     model: '',
     operatorNames: [''],
+    stationNames: [''], // NEW: Station names
     availableTime: '',
     lineCapacity: '',
     
@@ -67,7 +68,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     goodPartsLH: '',
     goodPartsRH: '',
     
-    // NEW: SPD fields
+    // SPD fields
     spdParts: '',
     spdPartsLH: '',
     spdPartsRH: '',
@@ -77,16 +78,15 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     rejectsLH: '',
     rejectsRH: '',
     
+    // Loss Time section (formerly Problem Head)
     problemHead: '',
-    description: '',
-    lossTime: '',
+    description: '', // Now text input
+    lossTime: '', // Moved to Loss Time section
     responsibility: '',
     defectType: 'Repeat',
     newDefectDescription: '',
-    rejectionPhenomena: '',
-    rejectionCause: '',
-    rejectionCorrectiveAction: '',
-    rejectionCount: '',
+    newDefectCorrectiveAction: '', // NEW: Corrective action for new defects
+    rejectionDetails: [], // NEW: Multiple rejection details
     
     // 4M Change tracking
     has4MChange: false,
@@ -176,12 +176,12 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         const data = await response.json()
         if (data) {
           setShiftData(data)
-          // Auto-populate date, line, and operators
           setFormData(prev => ({
             ...prev,
             date: data.date,
             line: data.line,
-            operatorNames: data.operatorNames
+            operatorNames: data.operatorNames,
+            stationNames: data.stationNames || data.operatorNames.map(() => '') // Handle existing data
           }))
         } else {
           setShiftData(null)
@@ -254,6 +254,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         shiftInCharge: editingEntry.shiftInCharge,
         model: editingEntry.model,
         operatorNames: editingEntry.operatorNames || [''],
+        stationNames: editingEntry.stationNames || [''],
         availableTime: editingEntry.availableTime,
         lineCapacity: editingEntry.lineCapacity,
         
@@ -281,10 +282,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         responsibility: editingEntry.responsibility,
         defectType: editingEntry.defectType || 'Repeat',
         newDefectDescription: editingEntry.newDefectDescription || '',
-        rejectionPhenomena: editingEntry.rejectionPhenomena || '',
-        rejectionCause: editingEntry.rejectionCause || '',
-        rejectionCorrectiveAction: editingEntry.rejectionCorrectiveAction || '',
-        rejectionCount: editingEntry.rejectionCount?.toString() || '',
+        newDefectCorrectiveAction: editingEntry.newDefectCorrectiveAction || '',
+        rejectionDetails: editingEntry.rejectionDetails || [],
 
         has4MChange: editingEntry.has4MChange || false,
         manChange: editingEntry.manChange || false,
@@ -357,6 +356,40 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     }
   }
 
+  // NEW: Rejection detail management functions
+  const addRejectionDetail = () => {
+    const newRejection: RejectionDetail = {
+      id: Date.now().toString(),
+      defectName: '',
+      rejectionPhenomena: '',
+      rejectionCause: '',
+      startLossTime: '',
+      endLossTime: '',
+      correctiveAction: '',
+      rejectionCount: 0
+    }
+    setFormData(prev => ({
+      ...prev,
+      rejectionDetails: [...prev.rejectionDetails, newRejection]
+    }))
+  }
+
+  const removeRejectionDetail = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      rejectionDetails: prev.rejectionDetails.filter(rejection => rejection.id !== id)
+    }))
+  }
+
+  const updateRejectionDetail = (id: string, field: keyof RejectionDetail, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      rejectionDetails: prev.rejectionDetails.map(rejection =>
+        rejection.id === id ? { ...rejection, [field]: value } : rejection
+      )
+    }))
+  }
+
   const renderProductionFields = () => {
     const isBoth = formData.productionType === 'BOTH'
     
@@ -380,8 +413,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
                 Rejects {isBoth && '(LH/RH)'}
               </th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Loss Time</th>
-              
             </tr>
           </thead>
           <tbody>
@@ -553,18 +584,6 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                 )}
                 {errors.rejects && <div className="text-xs text-red-600 mt-1">{errors.rejects}</div>}
               </td>
-              <td className="border border-gray-300 px-3 py-2">
-                <Input
-                  type="number"
-                  min="0"
-                  value={formData.lossTime}
-                  onChange={(e) => updateField('lossTime', e.target.value)}
-                  className={`h-8 text-xs ${hasError('lossTime') ? 'border-red-500' : 'border-gray-300'}`}
-                  placeholder="Minutes"
-                />
-                {errors.lossTime && <div className="text-xs text-red-600 mt-1">{errors.lossTime}</div>}
-              </td>
-              
             </tr>
           </tbody>
         </table>
@@ -572,11 +591,13 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     )
   }
 
+  // Operator and station management
   const addOperator = () => {
     if (formData.operatorNames.length < 8) {
       setFormData(prev => ({
         ...prev,
-        operatorNames: [...prev.operatorNames, '']
+        operatorNames: [...prev.operatorNames, ''],
+        stationNames: [...prev.stationNames, '']
       }))
     }
   }
@@ -585,7 +606,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     if (formData.operatorNames.length > 1) {
       setFormData(prev => ({
         ...prev,
-        operatorNames: prev.operatorNames.filter((_, i) => i !== index)
+        operatorNames: prev.operatorNames.filter((_, i) => i !== index),
+        stationNames: prev.stationNames.filter((_, i) => i !== index)
       }))
     }
   }
@@ -594,6 +616,13 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     setFormData(prev => ({
       ...prev,
       operatorNames: prev.operatorNames.map((op, i) => i === index ? name : op)
+    }))
+  }
+
+  const updateStationName = (index: number, station: string) => {
+    setFormData(prev => ({
+      ...prev,
+      stationNames: prev.stationNames.map((st, i) => i === index ? station : st)
     }))
   }
 
@@ -611,7 +640,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     if (!formData.availableTime) newErrors.availableTime = 'Required'
     if (!formData.lineCapacity) newErrors.lineCapacity = 'Required'
     if (!formData.problemHead) newErrors.problemHead = 'Required'
-    if (!formData.description) newErrors.description = 'Required'
+    if (!formData.description.trim()) newErrors.description = 'Required'
     if (!formData.responsibility) newErrors.responsibility = 'Required'
 
     // Operator validation
@@ -629,24 +658,30 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
     const lossTime = parseNumber(formData.lossTime)
     if (formData.lossTime !== '' && lossTime < 0) newErrors.lossTime = 'Cannot be negative'
 
-    // Rejection validation
-    if (totals.totalRejects > 0) {
-      if (!formData.rejectionPhenomena.trim()) newErrors.rejectionPhenomena = 'Required when rejects > 0'
-      if (!formData.rejectionCause.trim()) newErrors.rejectionCause = 'Required when rejects > 0'
-      if (!formData.rejectionCorrectiveAction.trim()) newErrors.rejectionCorrectiveAction = 'Required when rejects > 0'
-      
-      const rejectionCount = parseNumber(formData.rejectionCount)
-      if (formData.rejectionCount === '' || rejectionCount <= 0) {
-        newErrors.rejectionCount = 'Must be > 0 when rejects exist'
-      }
-      if (rejectionCount > totals.totalRejects) {
-        newErrors.rejectionCount = 'Cannot exceed total rejects'
-      }
+    // Rejection details validation
+    if (totals.totalRejects > 0 && formData.rejectionDetails.length === 0) {
+      newErrors.rejectionDetails = 'At least one rejection detail required when rejects > 0'
     }
 
+    // Validate individual rejection details
+    formData.rejectionDetails.forEach((rejection, index) => {
+      if (!rejection.defectName.trim()) newErrors[`rejection_${index}_defectName`] = 'Defect name required'
+      if (!rejection.rejectionPhenomena.trim()) newErrors[`rejection_${index}_phenomena`] = 'Phenomena required'
+      if (!rejection.rejectionCause.trim()) newErrors[`rejection_${index}_cause`] = 'Cause required'
+      if (!rejection.startLossTime.trim()) newErrors[`rejection_${index}_startTime`] = 'Start time required'
+      if (!rejection.endLossTime.trim()) newErrors[`rejection_${index}_endTime`] = 'End time required'
+      if (!rejection.correctiveAction.trim()) newErrors[`rejection_${index}_action`] = 'Action required'
+      if (rejection.rejectionCount <= 0) newErrors[`rejection_${index}_count`] = 'Count must be > 0'
+    })
+
     // New defect validation
-    if (formData.defectType === 'New' && !formData.newDefectDescription.trim()) {
-      newErrors.newDefectDescription = 'Required when defect type is New'
+    if (formData.defectType === 'New') {
+      if (!formData.newDefectDescription.trim()) {
+        newErrors.newDefectDescription = 'Required when defect type is New'
+      }
+      if (!formData.newDefectCorrectiveAction.trim()) {
+        newErrors.newDefectCorrectiveAction = 'Corrective action required for new defects'
+      }
     }
 
     // Date validation
@@ -685,6 +720,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
       const submitData = {
         ...formData,
         operatorNames: formData.operatorNames.filter(name => name.trim() !== ''),
+        stationNames: formData.stationNames.filter(name => name.trim() !== ''),
         
         // Handle production type specific data
         ...(formData.productionType === 'BOTH' ? {
@@ -717,7 +753,10 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
         }),
         
         lossTime: parseNumber(formData.lossTime),
-        rejectionCount: parseNumber(formData.rejectionCount)
+        rejectionDetails: formData.rejectionDetails.map(rejection => ({
+          ...rejection,
+          rejectionCount: Number(rejection.rejectionCount)
+        }))
       }
 
       const url = isEditing ? `/api/entries/${editingEntry?.id}` : '/api/entries'
@@ -763,6 +802,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
       shiftInCharge: '',
       model: '',
       operatorNames: shiftData?.operatorNames || [''],
+      stationNames: shiftData?.stationNames || [''],
       availableTime: '',
       lineCapacity: '',
       productionType: 'LH',
@@ -784,10 +824,8 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
       responsibility: '',
       defectType: 'Repeat',
       newDefectDescription: '',
-      rejectionPhenomena: '',
-      rejectionCause: '',
-      rejectionCorrectiveAction: '',
-      rejectionCount: '',
+      newDefectCorrectiveAction: '',
+      rejectionDetails: [],
       has4MChange: false,
       manChange: false,
       manReason: '',
@@ -1055,154 +1093,269 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               </table>
             </div>
 
-            {/* Production Metrics with new structure */}
+            {/* Production Metrics */}
             {renderProductionFields()}
 
-            {/* Problem Analysis with Defect Type */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-sm">
-                <thead>
-                  <tr>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Problem Head *</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Description *</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Responsibility *</th>
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Defect Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.problemHead} onValueChange={(value) => updateField('problemHead', value)}>
-                        <SelectTrigger className={`h-8 text-xs ${hasError('problemHead') ? 'border-red-500' : 'border-gray-300'}`}>
-                          <SelectValue placeholder="Select problem" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parameters.PROBLEM_HEAD?.map((problem) => (
-                            <SelectItem key={problem} value={problem}>{problem}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.problemHead && <div className="text-xs text-red-600 mt-1">{errors.problemHead}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.description} onValueChange={(value) => updateField('description', value)}>
-                        <SelectTrigger className={`h-8 text-xs ${hasError('description') ? 'border-red-500' : 'border-gray-300'}`}>
-                          <SelectValue placeholder="Select description" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parameters.DESCRIPTION?.map((desc) => (
-                            <SelectItem key={desc} value={desc}>{desc}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.description && <div className="text-xs text-red-600 mt-1">{errors.description}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <Select value={formData.responsibility} onValueChange={(value) => updateField('responsibility', value)}>
-                        <SelectTrigger className={`h-8 text-xs ${hasError('responsibility') ? 'border-red-500' : 'border-gray-300'}`}>
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {parameters.RESPONSIBILITY?.map((resp) => (
-                            <SelectItem key={resp} value={resp}>{resp}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.responsibility && <div className="text-xs text-red-600 mt-1">{errors.responsibility}</div>}
-                    </td>
-                    <td className="border border-gray-300 px-3 py-2">
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={formData.defectType === 'New'}
-                          onCheckedChange={(checked) => updateField('defectType', checked ? 'New' : 'Repeat')}
+            {/* Loss Time Section (formerly Problem Head) */}
+            <div className="space-y-4">
+              <Label className="text-sm font-semibold">Loss Time</Label>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-300 text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Problem Head *</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Description *</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Loss Time (min)</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Responsibility *</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-gray-300 px-3 py-2">
+                        <Select value={formData.problemHead} onValueChange={(value) => updateField('problemHead', value)}>
+                          <SelectTrigger className={`h-8 text-xs ${hasError('problemHead') ? 'border-red-500' : 'border-gray-300'}`}>
+                            <SelectValue placeholder="Select problem" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {parameters.PROBLEM_HEAD?.map((problem) => (
+                              <SelectItem key={problem} value={problem}>{problem}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.problemHead && <div className="text-xs text-red-600 mt-1">{errors.problemHead}</div>}
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2">
+                        <Input
+                          value={formData.description}
+                          onChange={(e) => updateField('description', e.target.value)}
+                          placeholder="Describe the problem in detail..."
+                          className={`h-8 text-xs ${hasError('description') ? 'border-red-500' : 'border-gray-300'}`}
                         />
-                        <Badge variant={formData.defectType === 'New' ? 'destructive' : 'secondary'} className="text-xs">
-                          {formData.defectType}
-                        </Badge>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                        {errors.description && <div className="text-xs text-red-600 mt-1">{errors.description}</div>}
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={formData.lossTime}
+                          onChange={(e) => updateField('lossTime', e.target.value)}
+                          className={`h-8 text-xs ${hasError('lossTime') ? 'border-red-500' : 'border-gray-300'}`}
+                          placeholder="Minutes"
+                        />
+                        {errors.lossTime && <div className="text-xs text-red-600 mt-1">{errors.lossTime}</div>}
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2">
+                        <Select value={formData.responsibility} onValueChange={(value) => updateField('responsibility', value)}>
+                          <SelectTrigger className={`h-8 text-xs ${hasError('responsibility') ? 'border-red-500' : 'border-gray-300'}`}>
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {parameters.RESPONSIBILITY?.map((resp) => (
+                              <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.responsibility && <div className="text-xs text-red-600 mt-1">{errors.responsibility}</div>}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* New Defect Description - Only show if New defect type */}
-            {formData.defectType === 'New' && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">New Defect Description *</Label>
-                <Input
-                  value={formData.newDefectDescription}
-                  onChange={(e) => updateField('newDefectDescription', e.target.value)}
-                  placeholder="Describe the new defect/problem in detail..."
-                  className={`h-8 text-xs ${hasError('newDefectDescription') ? 'border-red-500' : 'border-gray-300'}`}
-                />
-                {errors.newDefectDescription && <div className="text-xs text-red-600">{errors.newDefectDescription}</div>}
+            {/* Defect Type Section */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-4">
+                <Label className="text-sm font-semibold">Defect Type</Label>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={formData.defectType === 'New'}
+                    onCheckedChange={(checked) => updateField('defectType', checked ? 'New' : 'Repeat')}
+                  />
+                  <Badge variant={formData.defectType === 'New' ? 'destructive' : 'secondary'} className="text-xs">
+                    {formData.defectType}
+                  </Badge>
+                </div>
               </div>
-            )}
+
+              {/* New Defect Description - Only show if New defect type */}
+              {formData.defectType === 'New' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">New Defect Description *</Label>
+                    <Input
+                      value={formData.newDefectDescription}
+                      onChange={(e) => updateField('newDefectDescription', e.target.value)}
+                      placeholder="Describe the new defect/problem in detail..."
+                      className={`h-8 text-xs ${hasError('newDefectDescription') ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {errors.newDefectDescription && <div className="text-xs text-red-600">{errors.newDefectDescription}</div>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Corrective Action for New Defect *</Label>
+                    <Input
+                      value={formData.newDefectCorrectiveAction}
+                      onChange={(e) => updateField('newDefectCorrectiveAction', e.target.value)}
+                      placeholder="Corrective action taken for new defect..."
+                      className={`h-8 text-xs ${hasError('newDefectCorrectiveAction') ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {errors.newDefectCorrectiveAction && <div className="text-xs text-red-600">{errors.newDefectCorrectiveAction}</div>}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Rejection Details - Only show if total rejects > 0 */}
             {(() => {
               const totals = calculateTotals()
               if (totals.totalRejects > 0) {
+                // Ensure at least one rejection detail exists when there are rejects
+                if (formData.rejectionDetails.length === 0) {
+                  const defaultRejection: RejectionDetail = {
+                    id: Date.now().toString(),
+                    defectName: '',
+                    rejectionPhenomena: '',
+                    rejectionCause: '',
+                    startLossTime: '',
+                    endLossTime: '',
+                    correctiveAction: '',
+                    rejectionCount: 0
+                  }
+                  setFormData(prev => ({
+                    ...prev,
+                    rejectionDetails: [defaultRejection]
+                  }))
+                }
+
                 return (
                   <div className="space-y-4">
-                    <Label className="text-sm font-semibold">Rejection Details</Label>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse border border-gray-300 text-sm">
-                        <thead>
-                          <tr>
-                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Phenomena *</th>
-                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Cause *</th>
-                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Corrective Action *</th>
-                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Rejection Count *</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td className="border border-gray-300 px-3 py-2">
-                              <Input
-                                value={formData.rejectionPhenomena}
-                                onChange={(e) => updateField('rejectionPhenomena', e.target.value)}
-                                placeholder="Describe phenomena"
-                                className={`h-8 text-xs ${hasError('rejectionPhenomena') ? 'border-red-500' : 'border-gray-300'}`}
-                              />
-                              {errors.rejectionPhenomena && <div className="text-xs text-red-600 mt-1">{errors.rejectionPhenomena}</div>}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2">
-                              <Input
-                                value={formData.rejectionCause}
-                                onChange={(e) => updateField('rejectionCause', e.target.value)}
-                                placeholder="Root cause"
-                                className={`h-8 text-xs ${hasError('rejectionCause') ? 'border-red-500' : 'border-gray-300'}`}
-                              />
-                              {errors.rejectionCause && <div className="text-xs text-red-600 mt-1">{errors.rejectionCause}</div>}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2">
-                              <Input
-                                value={formData.rejectionCorrectiveAction}
-                                onChange={(e) => updateField('rejectionCorrectiveAction', e.target.value)}
-                                placeholder="Corrective action"
-                                className={`h-8 text-xs ${hasError('rejectionCorrectiveAction') ? 'border-red-500' : 'border-gray-300'}`}
-                              />
-                              {errors.rejectionCorrectiveAction && <div className="text-xs text-red-600 mt-1">{errors.rejectionCorrectiveAction}</div>}
-                            </td>
-                            <td className="border border-gray-300 px-3 py-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                max={totals.totalRejects}
-                                value={formData.rejectionCount}
-                                onChange={(e) => updateField('rejectionCount', e.target.value)}
-                                placeholder="Count"
-                                className={`h-8 text-xs ${hasError('rejectionCount') ? 'border-red-500' : 'border-gray-300'}`}
-                              />
-                              <div className="text-xs text-gray-500 mt-1">Max: {totals.totalRejects}</div>
-                              {errors.rejectionCount && <div className="text-xs text-red-600 mt-1">{errors.rejectionCount}</div>}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold">Rejection Details</Label>
+                      <Button
+                        type="button"
+                        onClick={addRejectionDetail}
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Rejection
+                      </Button>
                     </div>
+
+                    {formData.rejectionDetails.map((rejection, index) => (
+                      <div key={rejection.id} className="border rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium text-sm">Rejection #{index + 1}</h4>
+                          {formData.rejectionDetails.length > 1 && (
+                            <Button
+                              type="button"
+                              onClick={() => removeRejectionDetail(rejection.id)}
+                              size="sm"
+                              variant="outline"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-300 text-sm">
+                            <thead>
+                              <tr>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Defect Name *</th>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Phenomena *</th>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Cause *</th>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Start Loss Time *</th>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Corrective Action *</th>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">End Loss Time *</th>
+                                <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Count *</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    value={rejection.defectName}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'defectName', e.target.value)}
+                                    placeholder="Defect name"
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_defectName`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {errors[`rejection_${index}_defectName`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_defectName`]}</div>}
+                                </td>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    value={rejection.rejectionPhenomena}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'rejectionPhenomena', e.target.value)}
+                                    placeholder="Describe phenomena"
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_phenomena`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {errors[`rejection_${index}_phenomena`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_phenomena`]}</div>}
+                                </td>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    value={rejection.rejectionCause}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'rejectionCause', e.target.value)}
+                                    placeholder="Root cause"
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_cause`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {errors[`rejection_${index}_cause`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_cause`]}</div>}
+                                </td>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    type="time"
+                                    value={rejection.startLossTime}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'startLossTime', e.target.value)}
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_startTime`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {errors[`rejection_${index}_startTime`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_startTime`]}</div>}
+                                </td>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    value={rejection.correctiveAction}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'correctiveAction', e.target.value)}
+                                    placeholder="Corrective action"
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_action`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {errors[`rejection_${index}_action`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_action`]}</div>}
+                                </td>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    type="time"
+                                    value={rejection.endLossTime}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'endLossTime', e.target.value)}
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_endTime`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {errors[`rejection_${index}_endTime`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_endTime`]}</div>}
+                                </td>
+                                
+                                <td className="border border-gray-300 px-3 py-2">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max={totals.totalRejects}
+                                    value={rejection.rejectionCount}
+                                    onChange={(e) => updateRejectionDetail(rejection.id, 'rejectionCount', parseInt(e.target.value) || 0)}
+                                    placeholder="Count"
+                                    className={`h-8 text-xs ${hasError(`rejection_${index}_count`) ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  <div className="text-xs text-gray-500 mt-1">Max: {totals.totalRejects}</div>
+                                  {errors[`rejection_${index}_count`] && <div className="text-xs text-red-600 mt-1">{errors[`rejection_${index}_count`]}</div>}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+
+                    {errors.rejectionDetails && (
+                      <Alert className="border-red-300">
+                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                        <AlertDescription className="text-red-800">{errors.rejectionDetails}</AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 )
               }
@@ -1504,11 +1657,11 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
               )}
             </div>
 
-            {/* Operators Section - Locked after first entry */}
+            {/* Operators Section with Station Names - Locked after first entry */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">
-                  Operators *
+                  Operators & Stations *
                   <Badge variant="outline" className="ml-2 text-xs">
                     {formData.operatorNames.filter(name => name.trim()).length}/8
                   </Badge>
@@ -1535,6 +1688,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                     <tr>
                       <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-16">#</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Operator Name</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Station Name</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-semibold w-20">Action</th>
                     </tr>
                   </thead>
@@ -1549,6 +1703,15 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                             value={name}
                             onChange={(e) => updateOperatorName(index, e.target.value)}
                             placeholder={`Operator ${index + 1} name`}
+                            className="h-8 text-xs"
+                            disabled={!!shiftData && !isEditing}
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <Input
+                            value={formData.stationNames[index] || ''}
+                            onChange={(e) => updateStationName(index, e.target.value)}
+                            placeholder={`Station ${index + 1} name`}
                             className="h-8 text-xs"
                             disabled={!!shiftData && !isEditing}
                           />
@@ -1570,7 +1733,7 @@ export default function EntryForm({ onSuccess, onClose, editingEntry, isEditing 
                     ))}
                     {errors.operators && (
                       <tr>
-                        <td colSpan={3} className="border border-gray-300 px-3 py-2">
+                        <td colSpan={4} className="border border-gray-300 px-3 py-2">
                           <span className="text-xs text-red-600">{errors.operators}</span>
                         </td>
                       </tr>

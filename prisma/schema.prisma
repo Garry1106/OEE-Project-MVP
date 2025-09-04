@@ -24,30 +24,32 @@ model Entry {
   date            DateTime
   line            String
   shift           String
-  hour            String   // Add this field
+  hour            String
   teamLeader      String
   shiftInCharge   String
   model           String
   operatorNames   String[]
+  stationNames    String[] // NEW: Station names for operators
   availableTime   String
   lineCapacity    String
+  
+  // Loss Time section (formerly Problem Head)
   problemHead     String
-  description     String
-  lossTime        Int
+  description     String   // Now text input instead of dropdown
+  lossTime        Int      // Moved to Loss Time section
   responsibility  String
 
-    // Updated target fields
+  // Updated target fields
   ppcTarget       Int?
   ppcTargetLH     Int?
   ppcTargetRH     Int?
-
 
   // Updated production fields
   goodParts       Int?
   goodPartsLH     Int?
   goodPartsRH     Int?
   
-  // NEW: SPD fields
+  // SPD fields
   spdParts        Int?
   spdPartsLH      Int?
   spdPartsRH      Int?
@@ -57,17 +59,13 @@ model Entry {
   rejectsLH       Int?
   rejectsRH       Int?
 
-  
   productionType  ProductionType?
   defectType      DefectType?
   newDefectDescription String?
+  newDefectCorrectiveAction String? // NEW: Corrective action for new defects
   
-  // Rejection details
-  rejectionPhenomena       String?
-  rejectionCause           String?
-  rejectionCorrectiveAction String?
-  rejectionCount           Int?
-  rejectionReason          String?
+  // Multiple rejection details - stored as JSON array
+  rejectionDetails Json[] // Array of rejection objects
   
   status          Status
   submittedById   String   @db.ObjectId
@@ -80,15 +78,14 @@ model Entry {
   
   @@unique([date, shift, line, hour])
 
-
-
+  // 4M Change Management
   has4MChange    Boolean  @default(false)
   
   // Man category
   manChange      Boolean? @default(false)
   manReason      String?
-  manCC          String? // Critical Characteristics
-  manSC          String? // Significant Characteristics  
+  manCC          String?
+  manSC          String?
   manGeneral     String?
   
   // Machine category
@@ -136,7 +133,6 @@ enum ProductionType {
   RH
   BOTH
 }
-
 
 enum DefectType {
   REPEAT

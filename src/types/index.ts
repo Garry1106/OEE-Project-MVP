@@ -5,35 +5,43 @@ export interface User {
   role: 'TEAM_LEADER' | 'SUPERVISOR'
 }
 
+export interface RejectionDetail {
+  id: string
+  defectName: string
+  rejectionPhenomena: string
+  rejectionCause: string
+  startLossTime: string
+  endLossTime: string
+  correctiveAction: string
+  rejectionCount: number
+}
+
 export interface Entry {
   id: string
   date: string
   line: string
   shift: string
-  hour: string  // NEW FIELD
+  hour: string
   teamLeader: string
   shiftInCharge: string
   model: string
   operatorNames: string[]
+  stationNames: string[] // NEW: Station names
   availableTime: string
   lineCapacity: string
   problemHead: string
-  description: string
+  description: string // Now text input
   lossTime: number
   responsibility: string
   defectType?: 'Repeat' | 'New'
   newDefectDescription?: string
-  rejectionPhenomena: string | null
-  rejectionCause: string | null
-  rejectionCorrectiveAction: string | null
-  rejectionCount: number | null
-  rejectionReason?: string | null
+  newDefectCorrectiveAction?: string // NEW: Corrective action for new defects
+  rejectionDetails: RejectionDetail[] // NEW: Multiple rejection details
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
   submittedBy: { name: string; email: string }
   approvedBy?: { name: string; email: string }
   createdAt: string
   updatedAt: string
-
 
   productionType?: 'LH' | 'RH' | 'BOTH'
   
@@ -47,7 +55,7 @@ export interface Entry {
   goodPartsLH?: number
   goodPartsRH?: number
   
-  // NEW: SPD fields
+  // SPD fields
   spdParts?: number
   spdPartsLH?: number
   spdPartsRH?: number
@@ -56,10 +64,6 @@ export interface Entry {
   rejects?: number
   rejectsLH?: number
   rejectsRH?: number
-
-
-
-
 
   // 4M Change tracking
   has4MChange?: boolean
@@ -83,31 +87,28 @@ export interface Entry {
   methodCC?: string
   methodSC?: string
   methodGeneral?: string
-
 }
 
 export interface FormData {
   date: string
   line: string
   shift: string
-  hour: string  // NEW FIELD
+  hour: string
   teamLeader: string
   shiftInCharge: string
   model: string
   operatorNames: string[]
+  stationNames: string[] // NEW: Station names
   availableTime: string
   lineCapacity: string
   problemHead: string
-  description: string
+  description: string // Now text input
   lossTime: string
   responsibility: string
   defectType: 'Repeat' | 'New'
   newDefectDescription: string
-  rejectionPhenomena: string
-  rejectionCause: string
-  rejectionCorrectiveAction: string
-  rejectionCount: string
-
+  newDefectCorrectiveAction: string // NEW: Corrective action for new defects
+  rejectionDetails: RejectionDetail[] // NEW: Multiple rejection details
 
   productionType: 'LH' | 'RH' | 'BOTH'
   
@@ -121,7 +122,7 @@ export interface FormData {
   goodPartsLH: string
   goodPartsRH: string
   
-  // NEW: SPD fields
+  // SPD fields
   spdParts: string
   spdPartsLH: string
   spdPartsRH: string
@@ -130,14 +131,6 @@ export interface FormData {
   rejects: string
   rejectsLH: string
   rejectsRH: string
-  
-
-
-
-
-
-
-
 
   // 4M Change tracking
   has4MChange: boolean
@@ -161,7 +154,6 @@ export interface FormData {
   methodCC: string
   methodSC: string
   methodGeneral: string
-
 }
 
 export interface FormErrors {
@@ -179,8 +171,10 @@ export interface ShiftInfo {
   shiftName: string
   timeRemaining: string
 }
+
 export interface ShiftData {
   date: string
   line: string
   operatorNames: string[]
+  stationNames: string[] // NEW: Station names
 }

@@ -35,7 +35,9 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  TrendingUp,
+  Award
 } from 'lucide-react'
 import { calculateOEE, getOEECategory } from '@/lib/oee'
 
@@ -48,6 +50,7 @@ interface Filters {
   shift: string
   line: string
   teamLeader: string
+  productionType: string
   dateFrom: string
   dateTo: string
   searchTerm: string
@@ -80,6 +83,7 @@ export default function Dashboard({ user }: DashboardProps) {
     shift: 'all',
     line: 'all',
     teamLeader: 'all',
+    productionType: 'all',
     dateFrom: '',
     dateTo: '',
     searchTerm: ''
@@ -127,6 +131,25 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   }
 
+  // Helper function to calculate totals based on production type
+  const calculateTotals = (entry: Entry) => {
+    if (entry.productionType === 'BOTH') {
+      return {
+        totalGood: (entry.goodPartsLH || 0) + (entry.goodPartsRH || 0),
+        totalSpd: (entry.spdPartsLH || 0) + (entry.spdPartsRH || 0),
+        totalRejects: (entry.rejectsLH || 0) + (entry.rejectsRH || 0),
+        totalTarget: (entry.ppcTargetLH || 0) + (entry.ppcTargetRH || 0)
+      }
+    } else {
+      return {
+        totalGood: entry.goodParts || 0,
+        totalSpd: entry.spdParts || 0,
+        totalRejects: entry.rejects || 0,
+        totalTarget: entry.ppcTarget || 0
+      }
+    }
+  }
+
   const applyFilters = () => {
     let filtered = entries
 
@@ -150,6 +173,11 @@ export default function Dashboard({ user }: DashboardProps) {
       filtered = filtered.filter(entry => entry.teamLeader === filters.teamLeader)
     }
 
+    // Production type filter
+    if (filters.productionType !== 'all') {
+      filtered = filtered.filter(entry => entry.productionType === filters.productionType)
+    }
+
     // Date range filter
     if (filters.dateFrom) {
       filtered = filtered.filter(entry => new Date(entry.date) >= new Date(filters.dateFrom))
@@ -166,7 +194,8 @@ export default function Dashboard({ user }: DashboardProps) {
         entry.teamLeader.toLowerCase().includes(searchLower) ||
         entry.line.toLowerCase().includes(searchLower) ||
         entry.problemHead.toLowerCase().includes(searchLower) ||
-        entry.description.toLowerCase().includes(searchLower)
+        entry.description.toLowerCase().includes(searchLower) ||
+        entry.hour.toLowerCase().includes(searchLower)
       )
     }
 
@@ -193,6 +222,7 @@ export default function Dashboard({ user }: DashboardProps) {
       shift: 'all',
       line: 'all',
       teamLeader: 'all',
+      productionType: 'all',
       dateFrom: '',
       dateTo: '',
       searchTerm: ''
@@ -211,7 +241,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   // Get unique values for filter dropdowns
   const getUniqueValues = (field: keyof Entry) => {
-    return Array.from(new Set(entries.map(entry => entry[field] as string))).sort()
+    return Array.from(new Set(entries.map(entry => entry[field] as string))).filter(Boolean).sort()
   }
 
   // Existing functions remain unchanged
@@ -237,7 +267,7 @@ export default function Dashboard({ user }: DashboardProps) {
         if (selectedEntry && selectedEntry.id === entryId) {
           const updatedEntry = entries.find(e => e.id === entryId)
           if (updatedEntry) {
-            setSelectedEntry({ ...updatedEntry, status, rejectionReason: reason })
+            setSelectedEntry({ ...updatedEntry, status })
           }
         }
       } else {
@@ -287,7 +317,8 @@ export default function Dashboard({ user }: DashboardProps) {
         const entry: Entry = await response.json()
         const normalizedEntry: Entry = {
           ...entry,
-          operatorNames: entry.operatorNames || []
+          operatorNames: entry.operatorNames || [],
+          stationNames: entry.stationNames || []
         }
         setEditingEntry(normalizedEntry)
         setSelectedEntry(null)
@@ -304,7 +335,8 @@ export default function Dashboard({ user }: DashboardProps) {
   const handleEditFromDetails = (entry: Entry) => {
     const normalizedEntry: Entry = {
       ...entry,
-      operatorNames: entry.operatorNames || []
+      operatorNames: entry.operatorNames || [],
+      stationNames: entry.stationNames || []
     }
     setEditingEntry(normalizedEntry)
     setSelectedEntry(null)
@@ -591,7 +623,7 @@ export default function Dashboard({ user }: DashboardProps) {
           <CardContent className="p-6">
             {activeView === 'entries' ? (
               <>
-                {/* Advanced Filters */}
+                {/* Enhanced Filters */}
                 {showFilters && (
                   <Card className="mb-6 border-gray-200">
                     <CardHeader>
@@ -650,6 +682,22 @@ export default function Dashboard({ user }: DashboardProps) {
                           </Select>
                         </div>
 
+                        {/* Production Type Filter */}
+                        <div>
+                          <Label className="text-sm font-medium">Production Type</Label>
+                          <Select value={filters.productionType} onValueChange={(value) => updateFilter('productionType', value)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Types</SelectItem>
+                              <SelectItem value="LH">LH</SelectItem>
+                              <SelectItem value="RH">RH</SelectItem>
+                              <SelectItem value="BOTH">LH & RH</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
                         {/* Team Leader Filter */}
                         <div>
                           <Label className="text-sm font-medium">Team Leader</Label>
@@ -694,7 +742,7 @@ export default function Dashboard({ user }: DashboardProps) {
                           <Input
                             value={filters.searchTerm}
                             onChange={(e) => updateFilter('searchTerm', e.target.value)}
-                            placeholder="Model, Leader, Problem..."
+                            placeholder="Model, Leader, Hour..."
                             className="h-8 text-xs"
                           />
                         </div>
@@ -717,7 +765,8 @@ export default function Dashboard({ user }: DashboardProps) {
 
                 {/* Filter Summary */}
                 {(filters.status !== 'all' || filters.shift !== 'all' || filters.line !== 'all' ||
-                  filters.teamLeader !== 'all' || filters.dateFrom || filters.dateTo || filters.searchTerm) && (
+                  filters.teamLeader !== 'all' || filters.productionType !== 'all' || 
+                  filters.dateFrom || filters.dateTo || filters.searchTerm) && (
                     <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
                       <div className="flex items-center justify-between">
                         <div className="text-sm text-blue-800">
@@ -775,8 +824,9 @@ export default function Dashboard({ user }: DashboardProps) {
                             <TableHead className="font-semibold">Shift</TableHead>
                             <TableHead className="font-semibold">Hour</TableHead>
                             <TableHead className="font-semibold">Model</TableHead>
+                            <TableHead className="font-semibold">Production Type</TableHead>
                             <TableHead className="font-semibold">Production</TableHead>
-                             <TableHead className="font-semibold">OEE</TableHead> 
+                            <TableHead className="font-semibold">OEE</TableHead> 
                             <TableHead className="font-semibold">Status</TableHead>
                             <TableHead className="font-semibold">Team Leader</TableHead>
                             <TableHead className="font-semibold">Actions</TableHead>
@@ -784,13 +834,15 @@ export default function Dashboard({ user }: DashboardProps) {
                         </TableHeader>
                         <TableBody>
                           {paginatedEntries.map((entry) => {
-                            const totalParts = entry.goodParts + entry.rejects
+                            const totals = calculateTotals(entry)
+                            const totalProduction = totals.totalGood + totals.totalSpd + totals.totalRejects
+                            
                             const oeeData = calculateOEE(
                               entry.availableTime,
                               entry.lossTime,
                               entry.lineCapacity,
-                              entry.goodParts,
-                              entry.rejects
+                              totals.totalGood + totals.totalSpd,
+                              totals.totalRejects
                             )
 
                             const oeeCategory = getOEECategory(oeeData.oee)
@@ -820,23 +872,42 @@ export default function Dashboard({ user }: DashboardProps) {
                                 </TableCell>
                                 <TableCell>{entry.model}</TableCell>
                                 <TableCell>
+                                  <Badge variant={entry.productionType === 'BOTH' ? 'default' : 'secondary'}>
+                                    {entry.productionType || 'LH'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
                                   <div className="space-y-1">
                                     <div className="flex items-center text-sm">
                                       <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                                       <span className="text-green-600 font-medium">
-                                        {entry.goodParts.toLocaleString()}
+                                        {totals.totalGood.toLocaleString()}
                                       </span>
+                                      <span className="text-xs text-gray-500 ml-1">Good</span>
+                                    </div>
+                                    <div className="flex items-center text-sm">
+                                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                                      <span className="text-blue-600 font-medium">
+                                        {totals.totalSpd.toLocaleString()}
+                                      </span>
+                                      <span className="text-xs text-gray-500 ml-1">SPD</span>
                                     </div>
                                     <div className="flex items-center text-sm">
                                       <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
                                       <span className="text-red-600">
-                                        {entry.rejects.toLocaleString()}
+                                        {totals.totalRejects.toLocaleString()}
                                       </span>
+                                      <span className="text-xs text-gray-500 ml-1">Rejects</span>
                                     </div>
+                                    {entry.productionType === 'BOTH' && (
+                                      <div className="text-xs text-gray-500 mt-1 border-t pt-1">
+                                        LH: {((entry.goodPartsLH || 0) + (entry.spdPartsLH || 0) + (entry.rejectsLH || 0)).toLocaleString()} | 
+                                        RH: {((entry.goodPartsRH || 0) + (entry.spdPartsRH || 0) + (entry.rejectsRH || 0)).toLocaleString()}
+                                      </div>
+                                    )}
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {/* Replace efficiency with OEE */}
                                   <div className="flex items-center justify-center flex-col">
                                     <div className="text-right">
                                       <div className={`text-sm font-bold ${oeeCategory.color}`}>
@@ -852,20 +923,11 @@ export default function Dashboard({ user }: DashboardProps) {
                                         style={{ width: `${Math.min(oeeData.oee, 100)}%` }}
                                       ></div>
                                     </div>
-                                    
                                   </div>
-                                  {/* <div className="text-xs text-gray-500 mt-1 font-semibold">
-                                    A:{oeeData.availability}% P:{oeeData.performance}% Q:{oeeData.quality}%
-                                  </div> */}
                                 </TableCell>
                                 <TableCell>
                                   <div className="space-y-1">
                                     {getStatusBadge(entry.status)}
-                                    {entry.status === 'REJECTED' && entry.rejectionReason && (
-                                      <div className="text-xs text-red-600 max-w-48 truncate">
-                                        Reason: {entry.rejectionReason}
-                                      </div>
-                                    )}
                                   </div>
                                 </TableCell>
                                 <TableCell>

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useState } from 'react'
 import { Entry } from '@/types'
 import {
@@ -43,6 +44,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [confirmationChecked, setConfirmationChecked] = useState(false)
 
   // Calculate totals based on production type
   const calculateTotals = () => {
@@ -80,17 +82,19 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
   const targetAchievement = entry.ppcTarget && entry.ppcTarget > 0 ? Math.round((totals.totalProduction / entry.ppcTarget) * 100) : 0
 
   const handleApprove = () => {
-    if (onApprove) {
+    if (onApprove && confirmationChecked) {
       onApprove(entry.id, 'APPROVED')
     }
   }
 
   const handleRejectClick = () => {
-    setRejectionDialogOpen(true)
+    if (confirmationChecked) {
+      setRejectionDialogOpen(true)
+    }
   }
 
   const handleRejectConfirm = async () => {
-    if (onApprove && rejectionReason.trim()) {
+    if (onApprove && rejectionReason.trim() && confirmationChecked) {
       setSubmitting(true)
       await onApprove(entry.id, 'REJECTED', rejectionReason.trim())
       setSubmitting(false)
@@ -458,8 +462,6 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Defect Name</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Phenomena</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Cause</th>
-                      {/* <th className="border border-gray-300 px-3 py-2 text-left font-bold">Start Loss Time</th> */}
-                      {/* <th className="border border-gray-300 px-3 py-2 text-left font-bold">End Loss Time</th> */}
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Corrective Action</th>
                       <th className="border border-gray-300 px-3 py-2 text-left font-bold">Count</th>
                     </tr>
@@ -475,16 +477,6 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                       <td className="border border-gray-300 px-3 py-2 font-medium">
                         {rejection.rejectionCause || 'Not specified'}
                       </td>
-                      {/* <td className="border border-gray-300 px-3 py-2 font-medium">
-                        <Badge variant="outline" className="font-mono">
-                          {rejection.startLossTime || 'Not specified'}
-                        </Badge>
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 font-medium">
-                        <Badge variant="outline" className="font-mono">
-                          {rejection.endLossTime || 'Not specified'}
-                        </Badge>
-                      </td> */}
                       <td className="border border-gray-300 px-3 py-2 font-medium">
                         {rejection.correctiveAction || 'Not specified'}
                       </td>
@@ -624,15 +616,6 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                     <Badge variant={entry.materialChange ? 'default' : 'secondary'} className="text-xs">
                       {entry.materialChange ? 'Yes' : 'No'}
                     </Badge>
-                  </td>
-                  <td className="border border-gray-300 px-4 py-3">
-                    <div className="min-h-[20px]">
-                      {entry.materialChange && entry.materialReason ? (
-                        <span className="font-medium">{entry.materialReason}</span>
-                      ) : (
-                        <span className="text-gray-400 italic">No change</span>
-                      )}
-                    </div>
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     <div className="min-h-[20px]">
@@ -920,7 +903,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
         )}
       </div>
 
-      {/* Approval Actions */}
+      {/* Approval Actions - Updated with confirmation checkbox */}
       {showActions && entry.status === 'PENDING' && onApprove && userRole === 'SUPERVISOR' && (
         <Card className="shadow-lg border-2 border-gray-300 rounded-none">
           <CardHeader className="border-b">
@@ -930,30 +913,77 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="border border-gray-200 rounded p-2">
+            <div className="border border-gray-200 rounded p-4">
               <div className="text-center space-y-4">
                 <div className="text-lg font-medium text-gray-900 mb-4">
                   Review this production entry and take appropriate action
                 </div>
+
+                {/* Confirmation Checkbox */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start space-x-3">
+                    <Checkbox
+                      id="confirmation-checkbox"
+                      checked={confirmationChecked}
+                      onCheckedChange={(checked) => setConfirmationChecked(checked as boolean)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <Label 
+                        htmlFor="confirmation-checkbox" 
+                        className="text-sm font-medium text-gray-900 cursor-pointer"
+                      >
+                        I have thoroughly reviewed all production data, OEE metrics, operator information, rejection details, 4M changes, and loss time analysis in this entry.
+                      </Label>
+                      <p className="text-xs text-gray-600 mt-1">
+                        By checking this box, you confirm that you have carefully examined all aspects of this production entry before taking action.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex justify-center space-x-4">
                   <Button
                     onClick={handleApprove}
-                    className="px-8 py-3 text-lg font-semibold min-w-[150px] bg-green-600 hover:bg-green-700"
+                    className={`px-8 py-3 text-lg font-semibold min-w-[150px] ${
+                      confirmationChecked 
+                        ? 'bg-green-600 hover:bg-green-700' 
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
+                    disabled={!confirmationChecked || submitting}
                   >
-                    <CheckCircle className="mr-2 h-5 w-5" />
-                    Approve Entry
+                    {submitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="mr-2 h-5 w-5" />
+                        Approve Entry
+                      </>
+                    )}
                   </Button>
                   <Button
                     onClick={handleRejectClick}
                     variant="destructive"
-                    className="px-8 py-3 text-lg font-semibold min-w-[150px]"
+                    className={`px-8 py-3 text-lg font-semibold min-w-[150px] ${
+                      confirmationChecked 
+                        ? 'bg-red-600 hover:bg-red-700' 
+                        : 'bg-gray-400 cursor-not-allowed hover:bg-gray-400'
+                    }`}
+                    disabled={!confirmationChecked || submitting}
                   >
                     <XCircle className="mr-2 h-5 w-5" />
                     Return Entry
                   </Button>
                 </div>
+                
                 <div className="text-sm text-gray-500 mt-4">
-                  Approved entries will be saved to the database. Rejected entries will be sent back to the team leader for revision.
+                  {confirmationChecked 
+                    ? "Approved entries will be saved to the database. Rejected entries will be sent back to the team leader for revision."
+                    : "Please confirm that you have reviewed all entry details before proceeding."
+                  }
                 </div>
               </div>
             </div>
@@ -995,7 +1025,7 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
               <Button
                 variant="destructive"
                 onClick={handleRejectConfirm}
-                disabled={!rejectionReason.trim() || submitting}
+                disabled={!rejectionReason.trim() || submitting || !confirmationChecked}
               >
                 {submitting ? (
                   <>

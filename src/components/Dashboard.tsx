@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import EntryForm from './EntryForm'
 import EntryDetails from './EntryDetails'
 import { useRouter } from 'next/navigation'
@@ -26,18 +26,19 @@ import {
   FileText,
   Factory,
   ArrowLeft,
-  List,
   Eye,
   Calendar,
   Edit,
   Loader2,
   AlertTriangle,
   Filter,
-  ChevronLeft,
-  ChevronRight,
   Search,
+  ChevronDown,
+  ChevronUp,
+  Timer,
   TrendingUp,
-  Award
+  Target,
+  RefreshCw
 } from 'lucide-react'
 import { calculateOEE, getOEECategory } from '@/lib/oee'
 
@@ -51,21 +52,19 @@ interface Filters {
   line: string
   teamLeader: string
   productionType: string
-  dateFrom: string
-  dateTo: string
   searchTerm: string
 }
 
-interface Pagination {
-  currentPage: number
-  totalPages: number
-  totalItems: number
-  itemsPerPage: number
+interface GroupedEntries {
+  [date: string]: {
+    [shift: string]: Entry[]
+  }
 }
 
 export default function Dashboard({ user }: DashboardProps) {
   const [entries, setEntries] = useState<Entry[]>([])
   const [filteredEntries, setFilteredEntries] = useState<Entry[]>([])
+  const [groupedEntries, setGroupedEntries] = useState<GroupedEntries>({})
   const [loading, setLoading] = useState(true)
   const [activeView, setActiveView] = useState<'entries' | 'create' | 'details'>('entries')
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null)
@@ -76,6 +75,8 @@ export default function Dashboard({ user }: DashboardProps) {
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({})
 
   // Filters state
   const [filters, setFilters] = useState<Filters>({
@@ -84,17 +85,7 @@ export default function Dashboard({ user }: DashboardProps) {
     line: 'all',
     teamLeader: 'all',
     productionType: 'all',
-    dateFrom: '',
-    dateTo: '',
     searchTerm: ''
-  })
-
-  // Pagination state
-  const [pagination, setPagination] = useState<Pagination>({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
-    itemsPerPage: 24
   })
 
   const router = useRouter()
@@ -105,7 +96,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   useEffect(() => {
     applyFilters()
-  }, [entries, filters])
+  }, [entries, filters, selectedDate])
 
   useEffect(() => {
     if (notification) {
@@ -153,40 +144,35 @@ export default function Dashboard({ user }: DashboardProps) {
   const applyFilters = () => {
     let filtered = entries
 
-    // Status filter
+    // Date filter for selected date - default to today
+    if (selectedDate) {
+      filtered = filtered.filter(entry => {
+        const entryDate = new Date(entry.date).toISOString().split('T')[0]
+        return entryDate === selectedDate
+      })
+    }
+
+    // Apply other filters
     if (filters.status !== 'all') {
       filtered = filtered.filter(entry => entry.status.toLowerCase() === filters.status.toLowerCase())
     }
 
-    // Shift filter
     if (filters.shift !== 'all') {
       filtered = filtered.filter(entry => entry.shift === filters.shift)
     }
 
-    // Line filter
     if (filters.line !== 'all') {
       filtered = filtered.filter(entry => entry.line === filters.line)
     }
 
-    // Team leader filter
     if (filters.teamLeader !== 'all') {
       filtered = filtered.filter(entry => entry.teamLeader === filters.teamLeader)
     }
 
-    // Production type filter
     if (filters.productionType !== 'all') {
       filtered = filtered.filter(entry => entry.productionType === filters.productionType)
     }
 
-    // Date range filter
-    if (filters.dateFrom) {
-      filtered = filtered.filter(entry => new Date(entry.date) >= new Date(filters.dateFrom))
-    }
-    if (filters.dateTo) {
-      filtered = filtered.filter(entry => new Date(entry.date) <= new Date(filters.dateTo))
-    }
-
-    // Search filter
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase()
       filtered = filtered.filter(entry =>
@@ -200,20 +186,50 @@ export default function Dashboard({ user }: DashboardProps) {
     }
 
     setFilteredEntries(filtered)
+    groupEntriesByDateAndShift(filtered)
+  }
 
-    // Update pagination
-    const totalPages = Math.ceil(filtered.length / pagination.itemsPerPage)
-    setPagination(prev => ({
+  const groupEntriesByDateAndShift = (entries: Entry[]) => {
+    const grouped: GroupedEntries = {}
+    
+    entries.forEach(entry => {
+      const dateKey = new Date(entry.date).toISOString().split('T')[0]
+      const shiftKey = entry.shift
+      
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = {}
+      }
+      
+      if (!grouped[dateKey][shiftKey]) {
+        grouped[dateKey][shiftKey] = []
+      }
+      
+      grouped[dateKey][shiftKey].push(entry)
+    })
+
+    // Sort entries within each shift by hour
+    Object.keys(grouped).forEach(date => {
+      Object.keys(grouped[date]).forEach(shift => {
+        grouped[date][shift].sort((a, b) => {
+          const hourA = parseInt(a.hour.split(':')[0])
+          const hourB = parseInt(b.hour.split(':')[0])
+          return hourA - hourB
+        })
+      })
+    })
+
+    setGroupedEntries(grouped)
+  }
+
+  const toggleGroupExpansion = (dateShiftKey: string) => {
+    setExpandedGroups(prev => ({
       ...prev,
-      totalPages,
-      totalItems: filtered.length,
-      currentPage: Math.min(prev.currentPage, totalPages || 1)
+      [dateShiftKey]: !prev[dateShiftKey]
     }))
   }
 
   const updateFilter = (key: keyof Filters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
-    setPagination(prev => ({ ...prev, currentPage: 1 })) // Reset to first page
   }
 
   const clearFilters = () => {
@@ -223,20 +239,8 @@ export default function Dashboard({ user }: DashboardProps) {
       line: 'all',
       teamLeader: 'all',
       productionType: 'all',
-      dateFrom: '',
-      dateTo: '',
       searchTerm: ''
     })
-  }
-
-  const getPaginatedEntries = () => {
-    const startIndex = (pagination.currentPage - 1) * pagination.itemsPerPage
-    const endIndex = startIndex + pagination.itemsPerPage
-    return filteredEntries.slice(startIndex, endIndex)
-  }
-
-  const changePage = (newPage: number) => {
-    setPagination(prev => ({ ...prev, currentPage: newPage }))
   }
 
   // Get unique values for filter dropdowns
@@ -244,7 +248,15 @@ export default function Dashboard({ user }: DashboardProps) {
     return Array.from(new Set(entries.map(entry => entry[field] as string))).filter(Boolean).sort()
   }
 
-  // Existing functions remain unchanged
+  // Get available dates for quick selection
+  const getAvailableDates = () => {
+    const dates = Array.from(new Set(entries.map(entry => 
+      new Date(entry.date).toISOString().split('T')[0]
+    ))).sort().reverse()
+    return dates.slice(0, 5) // Show last 5 days
+  }
+
+  // Rest of the existing functions remain the same...
   const handleApproval = async (entryId: string, status: 'APPROVED' | 'REJECTED', reason?: string) => {
     try {
       setSubmitting(true)
@@ -379,17 +391,17 @@ export default function Dashboard({ user }: DashboardProps) {
       PENDING: {
         variant: 'secondary' as const,
         icon: Clock,
-        className: 'bg-yellow-100 text-yellow-800 border-yellow-300'
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-200'
       },
       APPROVED: {
         variant: 'default' as const,
         icon: CheckCircle,
-        className: 'bg-green-100 text-green-800 border-green-300'
+        className: 'bg-green-50 text-green-700 border-green-200'
       },
       REJECTED: {
         variant: 'destructive' as const,
         icon: XCircle,
-        className: 'bg-red-100 text-red-800 border-red-300'
+        className: 'bg-red-50 text-red-700 border-red-200'
       }
     }
 
@@ -411,30 +423,51 @@ export default function Dashboard({ user }: DashboardProps) {
     rejected: filteredEntries.filter(e => e.status === 'REJECTED').length
   }
 
-  const paginatedEntries = getPaginatedEntries()
+  // Calculate daily metrics
+  const dailyMetrics = Object.values(groupedEntries).reduce((acc, shifts) => {
+    const allEntries = Object.values(shifts).flat()
+    const totalProduction = allEntries.reduce((sum, entry) => {
+      const totals = calculateTotals(entry)
+      return sum + totals.totalGood + totals.totalSpd + totals.totalRejects
+    }, 0)
+    
+    const avgOEE = allEntries.length > 0 ? allEntries.reduce((sum, entry) => {
+      const totals = calculateTotals(entry)
+      const oeeData = calculateOEE(
+        entry.availableTime,
+        entry.lossTime,
+        entry.lineCapacity,
+        totals.totalGood + totals.totalSpd,
+        totals.totalRejects
+      )
+      return sum + oeeData.oee
+    }, 0) / allEntries.length : 0
+
+    return {
+      totalProduction: acc.totalProduction + totalProduction,
+      avgOEE: avgOEE
+    }
+  }, { totalProduction: 0, avgOEE: 0 })
 
   // If viewing entry details
   if (activeView === 'details' && selectedEntry) {
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div className="flex items-center space-x-4">
-                <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Factory className="h-5 w-5 text-blue-600" />
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="flex justify-between items-center py-4">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Factory className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Entry Details</h1>
+                  <h1 className="text-xl font-semibold text-gray-900">Entry Details</h1>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">{user.name}</span>
-                    <Badge variant="outline" className="ml-2">
-                      {user.role.replace('_', ' ')}
-                    </Badge>
+                    {user.name} • {user.role.replace('_', ' ')}
                   </p>
                 </div>
               </div>
-              <Button onClick={handleLogout} variant="outline">
+              <Button onClick={handleLogout} variant="outline" size="sm">
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </Button>
@@ -460,34 +493,31 @@ export default function Dashboard({ user }: DashboardProps) {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Factory className="h-5 w-5 text-blue-600" />
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-3">
+              <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Factory className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Manufacturing Dashboard</h1>
+                <h1 className="text-xl font-semibold text-gray-900">Manufacturing Dashboard</h1>
                 <p className="text-sm text-gray-600">
-                  Welcome back, <span className="font-medium">{user.name}</span>
-                  <Badge variant="outline" className="ml-2">
-                    {user.role.replace('_', ' ')}
-                  </Badge>
+                  {user.name} • {user.role.replace('_', ' ')}
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               {user.role === 'SUPERVISOR' && (
                 <Button
                   onClick={() => router.push('/dashboard/analytics')}
                   variant="outline"
-                  className="hidden sm:flex"
+                  size="sm"
                 >
                   <BarChart3 className="mr-2 h-4 w-4" />
                   Analytics
                 </Button>
               )}
-              <Button onClick={handleLogout} variant="outline">
+              <Button onClick={handleLogout} variant="outline" size="sm">
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </Button>
@@ -517,100 +547,101 @@ export default function Dashboard({ user }: DashboardProps) {
         )}
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Filtered Total</CardTitle>
-              <FileText className="h-4 w-4 text-gray-400" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-medium text-gray-600">Today's Entries</CardTitle>
+                <FileText className="h-4 w-4 text-gray-400" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-              <p className="text-xs text-gray-500 mt-1">Matching filters</p>
+              <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
+              <p className="text-xs text-gray-500">Total records</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Pending</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-500" />
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-medium text-gray-600">Pending</CardTitle>
+                <Clock className="h-4 w-4 text-yellow-500" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-              <p className="text-xs text-gray-500 mt-1">Awaiting approval</p>
+              <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
+              <p className="text-xs text-gray-500">Awaiting approval</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Approved</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-medium text-gray-600">Production</CardTitle>
+                <Target className="h-4 w-4 text-green-500" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
-              <p className="text-xs text-gray-500 mt-1">Successfully approved</p>
+              <div className="text-3xl font-bold text-green-600">{dailyMetrics.totalProduction.toLocaleString()}</div>
+              <p className="text-xs text-gray-500">Units produced</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Rejected</CardTitle>
-              <XCircle className="h-4 w-4 text-red-500" />
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-medium text-gray-600">Avg OEE</CardTitle>
+                <TrendingUp className="h-4 w-4 text-blue-500" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{stats.rejected}</div>
-              <p className="text-xs text-gray-500 mt-1">Requires revision</p>
+              <div className="text-3xl font-bold text-blue-600">{dailyMetrics.avgOEE.toFixed(1)}%</div>
+              <p className="text-xs text-gray-500">Overall efficiency</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Main Content */}
-        <Card className="shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
               <div>
-                <CardTitle className="text-xl text-gray-900">
+                <CardTitle className="text-lg font-semibold text-gray-900">
                   {activeView === 'entries'
-                    ? 'Hourly Production Entries'
+                    ? 'Production Monitoring'
                     : editingEntry
-                      ? 'Edit Production Entry'
-                      : 'Create New Entry'
+                      ? 'Edit Entry'
+                      : 'Create Entry'
                   }
                 </CardTitle>
                 <CardDescription>
                   {activeView === 'entries'
-                    ? user.role === 'TEAM_LEADER'
-                      ? 'Manage hourly production entries and track approval status'
-                      : 'Review and approve hourly production entries from team leaders'
+                    ? `Hourly production data for ${new Date(selectedDate).toLocaleDateString()}`
                     : editingEntry
-                      ? 'Modify hourly production data'
-                      : 'Enter hourly production data for supervisor approval'
+                      ? 'Modify production entry'
+                      : 'Create new production entry'
                   }
                 </CardDescription>
               </div>
 
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 {activeView === 'create' && (
-                  <Button
-                    variant="outline"
-                    onClick={handleBackToEntries}
-                  >
+                  <Button variant="outline" onClick={handleBackToEntries} size="sm">
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Entries
+                    Back
                   </Button>
                 )}
                 {activeView === 'entries' && (
                   <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowFilters(!showFilters)}
-                    >
-                      <Filter className="mr-2 h-4 w-4" />
-                      {showFilters ? 'Hide Filters' : 'Show Filters'}
+                    <Button variant="outline" onClick={() => fetchEntries()} size="sm">
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Refresh
                     </Button>
-                    <Button
-                      className="bg-blue-600 hover:bg-blue-700"
-                      onClick={handleCreateNew}
-                    >
+                    <Button variant="outline" onClick={() => setShowFilters(!showFilters)} size="sm">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Filters
+                    </Button>
+                    <Button onClick={handleCreateNew} size="sm" className='bg-blue-600 hover:bg-blue-700'>
                       <Plus className="mr-2 h-4 w-4" />
                       New Entry
                     </Button>
@@ -620,25 +651,39 @@ export default function Dashboard({ user }: DashboardProps) {
             </div>
           </CardHeader>
 
-          <CardContent className="p-6">
+          <CardContent>
             {activeView === 'entries' ? (
               <>
-                {/* Enhanced Filters */}
+                {/* Date Selection */}
+                <div className="mb-4 inline-block p-4 bg-blue-50 rounded-lg border">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        <Calendar className="h-4 w-4 mr-1" />
+                        Select Date
+                      </Label>
+                      <Input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="w-48 bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filters */}
                 {showFilters && (
-                  <Card className="mb-6 border-gray-200">
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center">
-                        <Filter className="mr-2 h-4 w-4" />
-                        Filter Options
-                      </CardTitle>
+                  <Card className="mb-4">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base font-medium">Filters</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {/* Status Filter */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
                         <div>
                           <Label className="text-sm font-medium">Status</Label>
                           <Select value={filters.status} onValueChange={(value) => updateFilter('status', value)}>
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -650,11 +695,10 @@ export default function Dashboard({ user }: DashboardProps) {
                           </Select>
                         </div>
 
-                        {/* Shift Filter */}
                         <div>
                           <Label className="text-sm font-medium">Shift</Label>
                           <Select value={filters.shift} onValueChange={(value) => updateFilter('shift', value)}>
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -666,11 +710,10 @@ export default function Dashboard({ user }: DashboardProps) {
                           </Select>
                         </div>
 
-                        {/* Line Filter */}
                         <div>
                           <Label className="text-sm font-medium">Line</Label>
                           <Select value={filters.line} onValueChange={(value) => updateFilter('line', value)}>
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -682,31 +725,29 @@ export default function Dashboard({ user }: DashboardProps) {
                           </Select>
                         </div>
 
-                        {/* Production Type Filter */}
                         <div>
                           <Label className="text-sm font-medium">Production Type</Label>
                           <Select value={filters.productionType} onValueChange={(value) => updateFilter('productionType', value)}>
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">All Types</SelectItem>
                               <SelectItem value="LH">LH</SelectItem>
                               <SelectItem value="RH">RH</SelectItem>
-                              <SelectItem value="BOTH">LH & RH</SelectItem>
+                              <SelectItem value="BOTH">Both</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
-                        {/* Team Leader Filter */}
                         <div>
                           <Label className="text-sm font-medium">Team Leader</Label>
                           <Select value={filters.teamLeader} onValueChange={(value) => updateFilter('teamLeader', value)}>
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">All Team Leaders</SelectItem>
+                              <SelectItem value="all">All Leaders</SelectItem>
                               {getUniqueValues('teamLeader').map((leader) => (
                                 <SelectItem key={leader} value={leader}>{leader}</SelectItem>
                               ))}
@@ -714,362 +755,331 @@ export default function Dashboard({ user }: DashboardProps) {
                           </Select>
                         </div>
 
-                        {/* Date From */}
-                        <div>
-                          <Label className="text-sm font-medium">Date From</Label>
-                          <Input
-                            type="date"
-                            value={filters.dateFrom}
-                            onChange={(e) => updateFilter('dateFrom', e.target.value)}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        {/* Date To */}
-                        <div>
-                          <Label className="text-sm font-medium">Date To</Label>
-                          <Input
-                            type="date"
-                            value={filters.dateTo}
-                            onChange={(e) => updateFilter('dateTo', e.target.value)}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        {/* Search */}
                         <div>
                           <Label className="text-sm font-medium">Search</Label>
-                          <Input
-                            value={filters.searchTerm}
-                            onChange={(e) => updateFilter('searchTerm', e.target.value)}
-                            placeholder="Model, Leader, Hour..."
-                            className="h-8 text-xs"
-                          />
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2 h-4 w-4 text-gray-400" />
+                            <Input
+                              value={filters.searchTerm}
+                              onChange={(e) => updateFilter('searchTerm', e.target.value)}
+                              placeholder="Search..."
+                              className="pl-8 h-8"
+                            />
+                          </div>
                         </div>
+                      </div>
 
-                        {/* Clear Filters */}
-                        <div className="flex items-end">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={clearFilters}
-                            className="h-8 text-xs"
-                          >
-                            Clear All
-                          </Button>
-                        </div>
+                      <div className="flex justify-end mt-3">
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear Filters
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
                 )}
 
-                {/* Filter Summary */}
-                {(filters.status !== 'all' || filters.shift !== 'all' || filters.line !== 'all' ||
-                  filters.teamLeader !== 'all' || filters.productionType !== 'all' || 
-                  filters.dateFrom || filters.dateTo || filters.searchTerm) && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-blue-800">
-                          <Search className="h-4 w-4 inline mr-1" />
-                          Showing {stats.total} of {entries.length} entries
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={clearFilters} className="text-blue-600 text-xs">
-                          Clear Filters
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                {/* Entries Table */}
+                {/* Entries by Shift */}
                 {loading ? (
                   <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-500">Loading entries...</p>
+                    <p className="mt-4 text-gray-500">Loading production data...</p>
                   </div>
-                ) : filteredEntries.length === 0 ? (
+                ) : Object.keys(groupedEntries).length === 0 ? (
                   <div className="text-center py-12">
-                    <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500 text-lg">No entries found</p>
-                    <p className="text-gray-400 mb-6">
-                      {Object.values(filters).some(f => f && f !== 'all')
-                        ? 'Try adjusting your filters or create a new entry'
-                        : user.role === 'TEAM_LEADER'
-                          ? 'Create your first hourly entry to get started'
-                          : 'No entries are currently available for review'
+                    <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                      <FileText className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No entries found</h3>
+                    <p className="text-gray-600 mb-6">
+                      {Object.values(filters).some(f => f && f !== 'all') || filters.searchTerm
+                        ? 'No entries match your filters. Try adjusting them or create a new entry.'
+                        : `No production entries for ${new Date(selectedDate).toLocaleDateString()}. Create the first entry.`
                       }
                     </p>
-                    <div className="flex justify-center space-x-3">
-                      {Object.values(filters).some(f => f && f !== 'all') && (
-                        <Button variant="outline" onClick={clearFilters}>
+                    <div className="flex justify-center gap-3">
+                      {(Object.values(filters).some(f => f && f !== 'all') || filters.searchTerm) && (
+                        <Button variant="outline" onClick={clearFilters} size="sm">
                           Clear Filters
                         </Button>
                       )}
-                      <Button
-                        onClick={handleCreateNew}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
+                      <Button onClick={handleCreateNew} size="sm">
                         <Plus className="mr-2 h-4 w-4" />
                         Create Entry
                       </Button>
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-gray-50">
-                            <TableHead className="font-semibold">Date</TableHead>
-                            <TableHead className="font-semibold">Line</TableHead>
-                            <TableHead className="font-semibold">Shift</TableHead>
-                            <TableHead className="font-semibold">Hour</TableHead>
-                            <TableHead className="font-semibold">Model</TableHead>
-                            <TableHead className="font-semibold">Production Type</TableHead>
-                            <TableHead className="font-semibold">Production</TableHead>
-                            <TableHead className="font-semibold">OEE</TableHead> 
-                            <TableHead className="font-semibold">Status</TableHead>
-                            <TableHead className="font-semibold">Team Leader</TableHead>
-                            <TableHead className="font-semibold">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedEntries.map((entry) => {
-                            const totals = calculateTotals(entry)
-                            const totalProduction = totals.totalGood + totals.totalSpd + totals.totalRejects
-                            
-                            const oeeData = calculateOEE(
-                              entry.availableTime,
-                              entry.lossTime,
-                              entry.lineCapacity,
-                              totals.totalGood + totals.totalSpd,
-                              totals.totalRejects
-                            )
-
-                            const oeeCategory = getOEECategory(oeeData.oee)
-
-                            return (
-                              <TableRow key={entry.id} className="hover:bg-gray-50">
-                                <TableCell className="font-medium">
-                                  <div className="flex items-center">
-                                    <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                                    {new Date(entry.date).toLocaleDateString()}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                                    {entry.line}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">
-                                    {entry.shift}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="bg-gray-100 text-gray-700 font-mono text-xs">
-                                    {entry.hour}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>{entry.model}</TableCell>
-                                <TableCell>
-                                  <Badge variant={entry.productionType === 'BOTH' ? 'default' : 'secondary'}>
-                                    {entry.productionType || 'LH'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="space-y-1">
-                                    <div className="flex items-center text-sm">
-                                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                                      <span className="text-green-600 font-medium">
-                                        {totals.totalGood.toLocaleString()}
-                                      </span>
-                                      <span className="text-xs text-gray-500 ml-1">Good</span>
-                                    </div>
-                                    <div className="flex items-center text-sm">
-                                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
-                                      <span className="text-blue-600 font-medium">
-                                        {totals.totalSpd.toLocaleString()}
-                                      </span>
-                                      <span className="text-xs text-gray-500 ml-1">SPD</span>
-                                    </div>
-                                    <div className="flex items-center text-sm">
-                                      <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
-                                      <span className="text-red-600">
-                                        {totals.totalRejects.toLocaleString()}
-                                      </span>
-                                      <span className="text-xs text-gray-500 ml-1">Rejects</span>
-                                    </div>
-                                    {entry.productionType === 'BOTH' && (
-                                      <div className="text-xs text-gray-500 mt-1 border-t pt-1">
-                                        LH: {((entry.goodPartsLH || 0) + (entry.spdPartsLH || 0) + (entry.rejectsLH || 0)).toLocaleString()} | 
-                                        RH: {((entry.goodPartsRH || 0) + (entry.spdPartsRH || 0) + (entry.rejectsRH || 0)).toLocaleString()}
-                                      </div>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center justify-center flex-col">
-                                    <div className="text-right">
-                                      <div className={`text-sm font-bold ${oeeCategory.color}`}>
-                                        {oeeData.oee}%
-                                      </div>
-                                    </div>
-                                    <div className="w-12 bg-gray-200 rounded-full h-2">
-                                      <div
-                                        className={`h-2 rounded-full ${oeeData.oee >= 85 ? 'bg-green-500' :
-                                            oeeData.oee >= 60 ? 'bg-blue-500' :
-                                              oeeData.oee >= 40 ? 'bg-yellow-500' : 'bg-red-500'
-                                          }`}
-                                        style={{ width: `${Math.min(oeeData.oee, 100)}%` }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="space-y-1">
-                                    {getStatusBadge(entry.status)}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="text-sm">
-                                    <div className="font-medium">{entry.submittedBy.name}</div>
-                                    <div className="text-gray-500">
-                                      {new Date(entry.createdAt).toLocaleDateString()}
-                                    </div>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleViewDetails(entry)}
-                                    >
-                                      <Eye className="mr-1 h-3 w-3" />
-                                      View
-                                    </Button>
-
-                                    {/* Edit button for Team Leaders (only pending entries) */}
-                                    {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleEditEntry(entry.id)}
-                                      >
-                                        <Edit className="mr-1 h-3 w-3" />
-                                        Edit
-                                      </Button>
-                                    )}
-
-                                    {/* Edit button for Supervisors (all entries) */}
-                                    {user.role === 'SUPERVISOR' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleEditEntry(entry.id)}
-                                      >
-                                        <Edit className="mr-1 h-3 w-3" />
-                                        Edit
-                                      </Button>
-                                    )}
-
-                                    {/* Approval buttons for Supervisors */}
-                                    {user.role === 'SUPERVISOR' && entry.status === 'PENDING' && (
-                                      <>
-                                        <Button
-                                          size="sm"
-                                          onClick={() => handleApproval(entry.id, 'APPROVED')}
-                                          className="bg-green-600 hover:bg-green-700"
-                                          disabled={submitting}
-                                        >
-                                          <CheckCircle className="mr-1 h-3 w-3" />
-                                          Approve
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="destructive"
-                                          onClick={() => handleRejectClick(entry.id)}
-                                          disabled={submitting}
-                                        >
-                                          <XCircle className="mr-1 h-3 w-3" />
-                                          Reject
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {/* Pagination */}
-                    {pagination.totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-                        <div className="text-sm text-gray-600">
-                          Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
-                          {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
-                          {pagination.totalItems} entries
-                        </div>
-
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => changePage(pagination.currentPage - 1)}
-                            disabled={pagination.currentPage === 1}
-                            className="h-8"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                            Previous
-                          </Button>
-
-                          <div className="flex items-center space-x-1">
-                            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                              let pageNum: number
-
-                              if (pagination.totalPages <= 5) {
-                                pageNum = i + 1
-                              } else {
-                                if (pagination.currentPage <= 3) {
-                                  pageNum = i + 1
-                                } else if (pagination.currentPage >= pagination.totalPages - 2) {
-                                  pageNum = pagination.totalPages - 4 + i
-                                } else {
-                                  pageNum = pagination.currentPage - 2 + i
-                                }
+                  <div className="space-y-4">
+                    {Object.entries(groupedEntries)
+                      .sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime())
+                      .map(([date, shifts]) => (
+                        <div key={date} className="space-y-3">
+                          {Object.entries(shifts)
+                            .sort(([shiftA], [shiftB]) => shiftA.localeCompare(shiftB))
+                            .map(([shift, shiftEntries]) => {
+                              const groupKey = `${date}-${shift}`
+                              const isExpanded = expandedGroups[groupKey] !== false // Default to expanded
+                              
+                              // Calculate shift summary stats
+                              const shiftStats = {
+                                totalEntries: shiftEntries.length,
+                                pending: shiftEntries.filter(e => e.status === 'PENDING').length,
+                                approved: shiftEntries.filter(e => e.status === 'APPROVED').length,
+                                rejected: shiftEntries.filter(e => e.status === 'REJECTED').length,
+                                totalProduction: shiftEntries.reduce((sum, entry) => {
+                                  const totals = calculateTotals(entry)
+                                  return sum + totals.totalGood + totals.totalSpd + totals.totalRejects
+                                }, 0),
+                                avgOEE: shiftEntries.length > 0 ? shiftEntries.reduce((sum, entry) => {
+                                  const totals = calculateTotals(entry)
+                                  const oeeData = calculateOEE(
+                                    entry.availableTime,
+                                    entry.lossTime,
+                                    entry.lineCapacity,
+                                    totals.totalGood + totals.totalSpd,
+                                    totals.totalRejects
+                                  )
+                                  return sum + oeeData.oee
+                                }, 0) / shiftEntries.length : 0
                               }
-
+                              
                               return (
-                                <Button
-                                  key={pageNum}
-                                  variant={pagination.currentPage === pageNum ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => changePage(pageNum)}
-                                  className="h-8 w-8 p-0"
-                                >
-                                  {pageNum}
-                                </Button>
+                                <Card key={groupKey} className="border-gray-200">
+                                  <Collapsible
+                                    open={isExpanded}
+                                    onOpenChange={() => toggleGroupExpansion(groupKey)}
+                                  >
+                                    <CollapsibleTrigger className="w-full">
+                                      <CardHeader className="hover:bg-gray-50 transition-colors">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center space-x-4 mb-3">
+                                            <div className="flex items-center space-x-3 ">
+                                              <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                                                <Timer className="h-4 w-4 text-white" />
+                                              </div>
+                                              <div className="text-left">
+                                                <h4 className="text-base font-bold text-gray-900">
+                                                 {shift} Shift 
+                                                </h4>
+                                                <p className="text-sm text-gray-500">
+                                                  {shiftStats.totalEntries} hours • {shiftStats.totalProduction.toLocaleString()} units • {shiftStats.avgOEE.toFixed(1)}% OEE
+                                                </p>
+                                              </div>
+                                            </div>
+                                            
+                                            <div className="hidden md:flex items-center space-x-4">
+                                              <div className="text-center">
+                                                <div className="text-lg font-bold text-gray-900">{shiftStats.totalProduction.toLocaleString()}</div>
+                                                <div className="text-xs text-gray-500">Production</div>
+                                              </div>
+                                              <div className="text-center">
+                                                <div className={`text-lg font-bold ${
+                                                  shiftStats.avgOEE >= 85 ? 'text-green-600' :
+                                                  shiftStats.avgOEE >= 60 ? 'text-blue-600' :
+                                                  shiftStats.avgOEE >= 40 ? 'text-yellow-600' : 'text-red-600'
+                                                }`}>
+                                                  {shiftStats.avgOEE.toFixed(1)}%
+                                                </div>
+                                                <div className="text-xs text-gray-500">Avg OEE</div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          
+                                          <div className="flex items-center space-x-3">
+                                            <div className="flex gap-2">
+                                              {shiftStats.pending > 0 && (
+                                                <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                                                  <Clock className="w-3 h-3 mr-1" />
+                                                  {shiftStats.pending}
+                                                </Badge>
+                                              )}
+                                              {shiftStats.approved > 0 && (
+                                                <Badge className="bg-green-50 text-green-700 border-green-200">
+                                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                                  {shiftStats.approved}
+                                                </Badge>
+                                              )}
+                                              {shiftStats.rejected > 0 && (
+                                                <Badge className="bg-red-50 text-red-700 border-red-200">
+                                                  <XCircle className="w-3 h-3 mr-1" />
+                                                  {shiftStats.rejected}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            
+                                            {isExpanded ? (
+                                              <ChevronUp className="h-6 w-6 text-gray-400" />
+                                            ) : (
+                                              <ChevronDown className="h-6 w-6 text-gray-400" />
+                                            )}
+                                          </div>
+                                        </div>
+                                      </CardHeader>
+                                    </CollapsibleTrigger>
+                                    
+                                    <CollapsibleContent>
+                                      <CardContent className="pt-0">
+                                        <div className="border rounded-lg overflow-hidden">
+                                          <Table>
+                                            <TableHeader>
+                                              <TableRow className="bg-gray-50">
+                                                <TableHead className="text-xs font-medium text-gray-700">Hour</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Line</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Model</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Type</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Production</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">OEE</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Status</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Team Leader</TableHead>
+                                                <TableHead className="text-xs font-medium text-gray-700">Actions</TableHead>
+                                              </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {shiftEntries.map((entry) => {
+                                                const totals = calculateTotals(entry)
+                                                
+                                                const oeeData = calculateOEE(
+                                                  entry.availableTime,
+                                                  entry.lossTime,
+                                                  entry.lineCapacity,
+                                                  totals.totalGood + totals.totalSpd,
+                                                  totals.totalRejects
+                                                )
+
+                                                return (
+                                                  <TableRow key={entry.id} className="hover:bg-gray-50">
+                                                    <TableCell>
+                                                      <Badge variant="outline" className="font-mono text-xs">
+                                                        {entry.hour}
+                                                      </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                                                        {entry.line}
+                                                      </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <span className="text-sm font-medium text-gray-900">{entry.model}</span>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <Badge variant="secondary" className="text-xs">
+                                                        {entry.productionType || 'LH'}
+                                                      </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="space-y-1">
+                                                        <div className="flex items-center text-xs">
+                                                          <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                                                          <span className="text-green-600 font-medium">
+                                                            {totals.totalGood.toLocaleString()}
+                                                          </span>
+                                                          <span className="text-gray-500 ml-1">Good</span>
+                                                        </div>
+                                                        <div className="flex items-center text-xs">
+                                                          <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                                                          <span className="text-blue-600 font-medium">
+                                                            {totals.totalSpd.toLocaleString()}
+                                                          </span>
+                                                          <span className="text-gray-500 ml-1">SPD</span>
+                                                        </div>
+                                                        <div className="flex items-center text-xs">
+                                                          <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                                                          <span className="text-red-600 font-medium">
+                                                            {totals.totalRejects.toLocaleString()}
+                                                          </span>
+                                                          <span className="text-gray-500 ml-1">Rejects</span>
+                                                        </div>
+                                                        {entry.productionType === 'BOTH' && (
+                                                          <div className="text-xs text-gray-500 mt-1 pt-1 border-t">
+                                                            LH: {((entry.goodPartsLH || 0) + (entry.spdPartsLH || 0) + (entry.rejectsLH || 0)).toLocaleString()} | 
+                                                            RH: {((entry.goodPartsRH || 0) + (entry.spdPartsRH || 0) + (entry.rejectsRH || 0)).toLocaleString()}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="flex items-center space-x-2">
+                                                        <div className={`text-sm font-bold ${
+                                                          oeeData.oee >= 85 ? 'text-green-600' :
+                                                          oeeData.oee >= 60 ? 'text-blue-600' :
+                                                          oeeData.oee >= 40 ? 'text-yellow-600' : 'text-red-600'
+                                                        }`}>
+                                                          {oeeData.oee}%
+                                                        </div>
+                                                        <div className="w-12 bg-gray-200 rounded-full h-2">
+                                                          <div
+                                                            className={`h-2 rounded-full ${
+                                                              oeeData.oee >= 85 ? 'bg-green-500' :
+                                                              oeeData.oee >= 60 ? 'bg-blue-500' :
+                                                              oeeData.oee >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                                            }`}
+                                                            style={{ width: `${Math.min(oeeData.oee, 100)}%` }}
+                                                          ></div>
+                                                        </div>
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      {getStatusBadge(entry.status)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="text-xs">
+                                                        <div className="font-medium text-gray-900">{entry.submittedBy.name}</div>
+                                                        <div className="text-gray-500">
+                                                          {new Date(entry.createdAt).toLocaleDateString()}
+                                                        </div>
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="flex flex-wrap gap-1">
+                                                        <Button
+                                                          size="sm"
+                                                          variant="outline"
+                                                          onClick={() => handleViewDetails(entry)}
+                                                        >
+                                                          <Eye className="mr-1 h-3 w-3" />
+                                                          View
+                                                        </Button>
+
+                                                        {/* Edit button for Team Leaders (only pending entries) */}
+                                                        {user.role === 'TEAM_LEADER' && entry.status === 'PENDING' && (
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleEditEntry(entry.id)}
+                                                          >
+                                                            <Edit className="mr-1 h-3 w-3" />
+                                                            Edit
+                                                          </Button>
+                                                        )}
+
+                                                        {/* Edit button for Supervisors (all entries) */}
+                                                        {user.role === 'SUPERVISOR' && (
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleEditEntry(entry.id)}
+                                                          >
+                                                            <Edit className="mr-1 h-3 w-3" />
+                                                            Edit
+                                                          </Button>
+                                                        )}
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                )
+                                              })}
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                      </CardContent>
+                                    </CollapsibleContent>
+                                  </Collapsible>
+                                </Card>
                               )
                             })}
-                          </div>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => changePage(pagination.currentPage + 1)}
-                            disabled={pagination.currentPage === pagination.totalPages}
-                            className="h-8"
-                          >
-                            Next
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
                         </div>
-                      </div>
-                    )}
-                  </>
+                      ))}
+                  </div>
                 )}
               </>
             ) : (
@@ -1092,34 +1102,37 @@ export default function Dashboard({ user }: DashboardProps) {
       <Dialog open={rejectionDialogOpen} onOpenChange={handleRejectCancel}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center text-red-700">
+            <DialogTitle className="flex items-center text-red-700 text-lg font-semibold">
               <XCircle className="mr-2 h-5 w-5" />
               Reject Entry
             </DialogTitle>
-            <DialogDescription>
-              Please provide a reason for rejecting this production entry. The team leader will see this feedback.
+            <DialogDescription className="text-sm text-gray-600">
+              Provide a reason for rejecting this entry. The team leader will receive this feedback.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="rejectionReason">Rejection Reason *</Label>
+              <Label htmlFor="rejectionReason" className="text-sm font-medium">
+                Rejection Reason *
+              </Label>
               <Textarea
                 id="rejectionReason"
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Enter detailed reason for rejection..."
+                placeholder="Enter reason for rejection..."
                 className="mt-1 min-h-[100px]"
                 required
               />
             </div>
             <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={handleRejectCancel} disabled={submitting}>
+              <Button variant="outline" onClick={handleRejectCancel} disabled={submitting} size="sm">
                 Cancel
               </Button>
               <Button
                 variant="destructive"
                 onClick={handleRejectConfirm}
                 disabled={!rejectionReason.trim() || submitting}
+                size="sm"
               >
                 {submitting ? (
                   <>

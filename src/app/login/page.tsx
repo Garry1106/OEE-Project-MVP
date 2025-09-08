@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   Factory, 
   Mail, 
@@ -17,14 +17,16 @@ import {
   Shield,
   Users,
   BarChart3,
-  CheckCircle,
-  ArrowRight,
-  Loader2
+  Loader2,
+  User,
+  Settings,
+  Zap
 } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [selectedRole, setSelectedRole] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -62,243 +64,241 @@ export default function LoginPage() {
     }
   }
 
-  const demoCredentials = [
+  const roles = [
     {
-      role: 'Admin',
+      value: 'admin',
+      label: 'System Administrator',
       email: 'admin@company.com',
-      description: 'Full system access & user management',
       icon: Shield,
-      color: 'bg-purple-100 text-purple-800 border-purple-200',
-      features: ['User Management', 'System Analytics', 'All Permissions']
+      description: 'Full system access'
     },
     {
-      role: 'Supervisor',
+      value: 'supervisor',
+      label: 'Production Supervisor', 
       email: 'supervisor@company.com',
-      description: 'Entry approval & analytics access',
       icon: BarChart3,
-      color: 'bg-blue-100 text-blue-800 border-blue-200',
-      features: ['Approve Entries', 'View Analytics', 'Quality Control']
+      description: 'Review entries & analytics'
     },
     {
-      role: 'Team Leader',
-      email: 'teamleader@company.com',
-      description: 'Production data entry specialist',
+      value: 'teamleader',
+      label: 'Team Leader',
+      email: 'teamleader@company.com', 
       icon: Users,
-      color: 'bg-green-100 text-green-800 border-green-200',
-      features: ['Create Entries', 'Track Status', 'Production Data']
+      description: 'Enter hourly production data'
     }
   ]
 
+  const handleRoleSelect = (value: string) => {
+    setSelectedRole(value)
+    const selectedRoleData = roles.find(role => role.value === value)
+    if (selectedRoleData) {
+      setEmail(selectedRoleData.email)
+      setPassword('password123')
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen relative overflow-hidden">
       {/* Background Pattern */}
-      <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,#fff,rgba(255,255,255,0.6))] -z-10" />
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.15)_1px,transparent_0)] [background-size:20px_20px]"></div>
+      </div>
+      
+      {/* Geometric Elements */}
+      <div className="absolute top-20 right-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
+      <div className="absolute bottom-20 left-20 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl"></div>
       
       <div className="min-h-screen flex">
-        {/* Left Side - Branding & Info */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-indigo-700 p-12 text-white relative overflow-hidden">
-          {/* Background Decorations */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -translate-y-32 translate-x-32" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-10 rounded-full translate-y-24 -translate-x-24" />
-          
-          <div className="relative z-10 flex flex-col justify-center max-w-lg">
-            <div className="flex items-center space-x-3 mb-8">
-              <div className="h-12 w-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                <Factory className="h-7 w-7 text-white" />
+        {/* Left Side - Branding */}
+        <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900 relative">
+          <div className="absolute inset-0 bg-black/20"></div>
+          <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 text-white">
+            <div className="mb-8">
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="h-16 w-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-2xl">
+                  <Factory className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-200 to-white bg-clip-text text-transparent">
+                    OEE Tracker
+                  </h1>
+                  <p className="text-blue-200 text-lg font-medium">Overall Equipment Effectiveness Platform</p>
+                </div>
               </div>
-              <h1 className="text-3xl font-bold">ManufacturingPro</h1>
             </div>
             
-            <h2 className="text-4xl font-bold mb-6 leading-tight">
-              Streamline Your Manufacturing Operations
-            </h2>
-            
-            <p className="text-xl text-blue-100 mb-8 leading-relaxed">
-              Advanced production data management with intelligent workflow automation, 
-              real-time analytics, and comprehensive quality control systems.
-            </p>
-
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <CheckCircle className="h-5 w-5 text-green-300" />
-                <span className="text-blue-100">Real-time production monitoring</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <CheckCircle className="h-5 w-5 text-green-300" />
-                <span className="text-blue-100">Intelligent approval workflows</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <CheckCircle className="h-5 w-5 text-green-300" />
-                <span className="text-blue-100">Advanced analytics & reporting</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <CheckCircle className="h-5 w-5 text-green-300" />
-                <span className="text-blue-100">Enterprise-grade security</span>
+            <div className="space-y-6 max-w-md">
+              <h2 className="text-3xl font-bold leading-tight">
+                Maximize Efficiency on the Shop Floor
+              </h2>
+              <p className="text-blue-100 text-lg leading-relaxed">
+                Record production data, approve shifts, and track OEE in real time — empowering smarter decisions for manufacturing teams.
+              </p>
+              
+              <div className="space-y-4 pt-6">
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                    <BarChart3 className="h-5 w-5 text-blue-300" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">OEE Analytics</p>
+                    <p className="text-blue-200 text-sm">Track Availability, Performance & Quality</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                    <Settings className="h-5 w-5 text-orange-300" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">Approval Workflow</p>
+                    <p className="text-blue-200 text-sm">Supervisors review & validate shift data</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                    <Zap className="h-5 w-5 text-green-300" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">Automated Insights</p>
+                    <p className="text-blue-200 text-sm">Generate efficiency reports instantly</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+        <div className="flex-1 lg:w-1/2 xl:w-2/5 flex items-center justify-center p-8 relative z-10">
           <div className="w-full max-w-md">
-            {/* Mobile Logo */}
-            <div className="lg:hidden flex items-center justify-center space-x-3 mb-8">
-              <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Factory className="h-5 w-5 text-white" />
+            {/* Mobile Header */}
+            <div className="lg:hidden text-center mb-8">
+              <div className="flex items-center justify-center space-x-3 mb-4">
+                <div className="h-12 w-12  rounded-lg flex items-center justify-center shadow-lg">
+                  <Factory className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-left">
+                  <h1 className="text-2xl font-bold text-white">OEE Tracker</h1>
+                  <p className="text-sm text-slate-400">Monitor & Improve Production Efficiency</p>
+                </div>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">ManufacturingPro</h1>
             </div>
 
-            <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
-              <CardHeader className="text-center pb-8">
-                <CardTitle className="text-2xl font-bold text-gray-900">Welcome Back</CardTitle>
-                <CardDescription className="text-gray-600">
-                  Sign in to access your manufacturing dashboard
+            <Card className="shadow-2xl border-0 bg-white">
+              <CardHeader className="text-center pb-2">
+                <CardTitle className="text-2xl font-bold text-slate-900 mb-2">Welcome Back</CardTitle>
+                <CardDescription className="text-slate-600 text-base">
+                  Sign in to access your OEE dashboard
                 </CardDescription>
               </CardHeader>
               
-              <CardContent className="space-y-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
+              <CardContent className="space-y-6 pt-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
+                
+                  {/* Email */}
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="email" className="text-sm font-semibold text-slate-700">
                       Email Address
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                       <Input
                         id="email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="pl-10 h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                        placeholder="Enter your email"
+                        className="pl-11 h-12 border-2 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-900 bg-white"
+                        placeholder="Enter your email address"
                         required
                       />
                     </div>
                   </div>
                   
+                  {/* Password */}
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="password" className="text-sm font-semibold text-slate-700">
                       Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="pl-10 pr-10 h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                        className="pl-11 pr-11 h-12 border-2 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-900 bg-white"
                         placeholder="Enter your password"
                         required
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Role Selection */}
+                  <div className="space-y-2">
+                    <Label htmlFor="role" className="text-sm font-semibold text-slate-700">
+                      Access Level
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400 z-10" />
+                      <Select value={selectedRole} onValueChange={handleRoleSelect}>
+                        <SelectTrigger className="pl-11 h-12 border-2 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-white">
+                          <SelectValue placeholder="Select your access level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map((role) => {
+                            return (
+                              <SelectItem key={role.value} value={role.value} className="py-3">
+                                <p className="font-medium">{role.label}</p>
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   
                   {error && (
-                    <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                      <p className="text-sm text-red-600">{error}</p>
+                    <div className="p-4 rounded-lg bg-red-50 border-2 border-red-200">
+                      <p className="text-sm font-medium text-red-700">{error}</p>
                     </div>
                   )}
                   
                   <Button 
                     type="submit" 
-                    className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium transition-all duration-200" 
+                    className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]" 
                     disabled={loading}
                   >
                     {loading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Authenticating...
                       </>
                     ) : (
                       <>
-                        <LogIn className="mr-2 h-4 w-4" />
-                        Sign In
+                        <LogIn className="mr-2 h-5 w-5" />
+                        Sign In 
                       </>
                     )}
                   </Button>
                 </form>
-
-                {/* Demo Credentials */}
-                <div className="mt-8">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200" />
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">Demo Accounts</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 space-y-3">
-                    {demoCredentials.map((cred) => {
-                      const IconComponent = cred.icon
-                      return (
-                        <div key={cred.role} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all duration-200">
-                          <div className="flex items-start space-x-3">
-                            <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <IconComponent className="h-5 w-5 text-gray-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center space-x-2 mb-1">
-                                <h4 className="text-sm font-semibold text-gray-900">{cred.role}</h4>
-                                <Badge variant="outline" className={cred.color}>
-                                  {cred.role}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-gray-600 mb-2">{cred.description}</p>
-                              <div className="flex items-center justify-between">
-                                <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono text-gray-700">
-                                  {cred.email}
-                                </code>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEmail(cred.email)
-                                    setPassword('password123')
-                                  }}
-                                  className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center"
-                                >
-                                  Use <ArrowRight className="h-3 w-3 ml-1" />
-                                </button>
-                              </div>
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {cred.features.map((feature) => (
-                                  <Badge key={feature} variant="secondary" className="text-xs">
-                                    {feature}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-xs text-amber-800 text-center">
-                      <strong>Password:</strong> <code className="bg-amber-100 px-1 rounded">password123</code> for all demo accounts
-                    </p>
-                  </div>
+                
+                {/* Footer */}
+                <div className="pt-4 border-t border-slate-200">
+                  <p className="text-center text-xs text-slate-500">
+                    Secure OEE tracking & manufacturing insights
+                  </p>
                 </div>
               </CardContent>
             </Card>
-
-            <div className="mt-6 text-center">
-              <p className="text-xs text-gray-500">
-                © 2024 ManufacturingPro. Enterprise manufacturing management solution.
-              </p>
-            </div>
           </div>
         </div>
       </div>

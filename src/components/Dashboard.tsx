@@ -40,7 +40,7 @@ import {
   Target,
   RefreshCw
 } from 'lucide-react'
-import { calculateOEE, getOEECategory } from '@/lib/oee'
+import { calculateHourlyOEE } from '@/lib/oee'
 
 interface DashboardProps {
   user: User
@@ -141,6 +141,19 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   }
 
+  // Helper function to calculate OEE for an entry using the new hourly calculation
+  const calculateEntryOEE = (entry: Entry) => {
+    const totals = calculateTotals(entry)
+
+    return calculateHourlyOEE(
+      entry.lossTime || 0,
+      entry.lineCapacity,
+      totals.totalGood,
+      totals.totalSpd,
+      totals.totalRejects
+    )
+  }
+
   const applyFilters = () => {
     let filtered = entries
 
@@ -191,19 +204,19 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const groupEntriesByDateAndShift = (entries: Entry[]) => {
     const grouped: GroupedEntries = {}
-    
+
     entries.forEach(entry => {
       const dateKey = new Date(entry.date).toISOString().split('T')[0]
       const shiftKey = entry.shift
-      
+
       if (!grouped[dateKey]) {
         grouped[dateKey] = {}
       }
-      
+
       if (!grouped[dateKey][shiftKey]) {
         grouped[dateKey][shiftKey] = []
       }
-      
+
       grouped[dateKey][shiftKey].push(entry)
     })
 
@@ -250,7 +263,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   // Get available dates for quick selection
   const getAvailableDates = () => {
-    const dates = Array.from(new Set(entries.map(entry => 
+    const dates = Array.from(new Set(entries.map(entry =>
       new Date(entry.date).toISOString().split('T')[0]
     ))).sort().reverse()
     return dates.slice(0, 5) // Show last 5 days
@@ -423,23 +436,18 @@ export default function Dashboard({ user }: DashboardProps) {
     rejected: filteredEntries.filter(e => e.status === 'REJECTED').length
   }
 
-  // Calculate daily metrics
+  // Calculate daily metrics using the new OEE calculation
   const dailyMetrics = Object.values(groupedEntries).reduce((acc, shifts) => {
     const allEntries = Object.values(shifts).flat()
     const totalProduction = allEntries.reduce((sum, entry) => {
       const totals = calculateTotals(entry)
       return sum + totals.totalGood + totals.totalSpd + totals.totalRejects
     }, 0)
-    
+
     const avgOEE = allEntries.length > 0 ? allEntries.reduce((sum, entry) => {
-      const totals = calculateTotals(entry)
-      const oeeData = calculateOEE(
-        entry.availableTime,
-        entry.lossTime,
-        entry.lineCapacity,
-        totals.totalGood + totals.totalSpd,
-        totals.totalRejects
-      )
+      const oeeData = calculateEntryOEE(entry)
+
+      const { availability, performance, quality, oee } = oeeData
       return sum + oeeData.oee
     }, 0) / allEntries.length : 0
 
@@ -819,30 +827,40 @@ export default function Dashboard({ user }: DashboardProps) {
                             .map(([shift, shiftEntries]) => {
                               const groupKey = `${date}-${shift}`
                               const isExpanded = expandedGroups[groupKey] !== false // Default to expanded
-                              
-                              // Calculate shift summary stats
+
+                              // Calculate shift summary stats using the new OEE calculation
                               const shiftStats = {
                                 totalEntries: shiftEntries.length,
                                 pending: shiftEntries.filter(e => e.status === 'PENDING').length,
                                 approved: shiftEntries.filter(e => e.status === 'APPROVED').length,
                                 rejected: shiftEntries.filter(e => e.status === 'REJECTED').length,
+
                                 totalProduction: shiftEntries.reduce((sum, entry) => {
                                   const totals = calculateTotals(entry)
                                   return sum + totals.totalGood + totals.totalSpd + totals.totalRejects
                                 }, 0),
+
                                 avgOEE: shiftEntries.length > 0 ? shiftEntries.reduce((sum, entry) => {
-                                  const totals = calculateTotals(entry)
-                                  const oeeData = calculateOEE(
-                                    entry.availableTime,
-                                    entry.lossTime,
-                                    entry.lineCapacity,
-                                    totals.totalGood + totals.totalSpd,
-                                    totals.totalRejects
-                                  )
+                                  const oeeData = calculateEntryOEE(entry)
                                   return sum + oeeData.oee
+                                }, 0) / shiftEntries.length : 0,
+
+                                avgAvailability: shiftEntries.length > 0 ? shiftEntries.reduce((sum, entry) => {
+                                  const oeeData = calculateEntryOEE(entry)
+                                  return sum + oeeData.availability
+                                }, 0) / shiftEntries.length : 0,
+
+                                avgPerformance: shiftEntries.length > 0 ? shiftEntries.reduce((sum, entry) => {
+                                  const oeeData = calculateEntryOEE(entry)
+                                  return sum + oeeData.performance
+                                }, 0) / shiftEntries.length : 0,
+
+                                avgQuality: shiftEntries.length > 0 ? shiftEntries.reduce((sum, entry) => {
+                                  const oeeData = calculateEntryOEE(entry)
+                                  return sum + oeeData.quality
                                 }, 0) / shiftEntries.length : 0
                               }
-                              
+
                               return (
                                 <Card key={groupKey} className="border-gray-200">
                                   <Collapsible
@@ -859,32 +877,34 @@ export default function Dashboard({ user }: DashboardProps) {
                                               </div>
                                               <div className="text-left">
                                                 <h4 className="text-base font-bold text-gray-900">
-                                                 {shift} Shift 
+                                                  {shift} Shift
                                                 </h4>
                                                 <p className="text-sm text-gray-500">
                                                   {shiftStats.totalEntries} hours • {shiftStats.totalProduction.toLocaleString()} units • {shiftStats.avgOEE.toFixed(1)}% OEE
                                                 </p>
+                                                <div className="text-xs text-gray-400 mt-1">
+                                                  A: {shiftStats.avgAvailability.toFixed(1)}% • P: {shiftStats.avgPerformance.toFixed(1)}% • Q: {shiftStats.avgQuality.toFixed(1)}%
+                                                </div>
                                               </div>
                                             </div>
-                                            
+
                                             <div className="hidden md:flex items-center space-x-4">
                                               <div className="text-center">
                                                 <div className="text-lg font-bold text-gray-900">{shiftStats.totalProduction.toLocaleString()}</div>
                                                 <div className="text-xs text-gray-500">Production</div>
                                               </div>
                                               <div className="text-center">
-                                                <div className={`text-lg font-bold ${
-                                                  shiftStats.avgOEE >= 85 ? 'text-green-600' :
-                                                  shiftStats.avgOEE >= 60 ? 'text-blue-600' :
-                                                  shiftStats.avgOEE >= 40 ? 'text-yellow-600' : 'text-red-600'
-                                                }`}>
+                                                <div className={`text-lg font-bold ${shiftStats.avgOEE >= 85 ? 'text-green-600' :
+                                                    shiftStats.avgOEE >= 60 ? 'text-blue-600' :
+                                                      shiftStats.avgOEE >= 40 ? 'text-yellow-600' : 'text-red-600'
+                                                  }`}>
                                                   {shiftStats.avgOEE.toFixed(1)}%
                                                 </div>
                                                 <div className="text-xs text-gray-500">Avg OEE</div>
                                               </div>
                                             </div>
                                           </div>
-                                          
+
                                           <div className="flex items-center space-x-3">
                                             <div className="flex gap-2">
                                               {shiftStats.pending > 0 && (
@@ -906,7 +926,7 @@ export default function Dashboard({ user }: DashboardProps) {
                                                 </Badge>
                                               )}
                                             </div>
-                                            
+
                                             {isExpanded ? (
                                               <ChevronUp className="h-6 w-6 text-gray-400" />
                                             ) : (
@@ -916,7 +936,7 @@ export default function Dashboard({ user }: DashboardProps) {
                                         </div>
                                       </CardHeader>
                                     </CollapsibleTrigger>
-                                    
+
                                     <CollapsibleContent>
                                       <CardContent className="pt-0">
                                         <div className="border rounded-lg overflow-hidden">
@@ -937,14 +957,9 @@ export default function Dashboard({ user }: DashboardProps) {
                                             <TableBody>
                                               {shiftEntries.map((entry) => {
                                                 const totals = calculateTotals(entry)
-                                                
-                                                const oeeData = calculateOEE(
-                                                  entry.availableTime,
-                                                  entry.lossTime,
-                                                  entry.lineCapacity,
-                                                  totals.totalGood + totals.totalSpd,
-                                                  totals.totalRejects
-                                                )
+
+                                                // Use the new OEE calculation
+                                                const oeeData = calculateEntryOEE(entry)
 
                                                 return (
                                                   <TableRow key={entry.id} className="hover:bg-gray-50">
@@ -991,7 +1006,7 @@ export default function Dashboard({ user }: DashboardProps) {
                                                         </div>
                                                         {entry.productionType === 'BOTH' && (
                                                           <div className="text-xs text-gray-500 mt-1 pt-1 border-t">
-                                                            LH: {((entry.goodPartsLH || 0) + (entry.spdPartsLH || 0) + (entry.rejectsLH || 0)).toLocaleString()} | 
+                                                            LH: {((entry.goodPartsLH || 0) + (entry.spdPartsLH || 0) + (entry.rejectsLH || 0)).toLocaleString()} |
                                                             RH: {((entry.goodPartsRH || 0) + (entry.spdPartsRH || 0) + (entry.rejectsRH || 0)).toLocaleString()}
                                                           </div>
                                                         )}
@@ -999,20 +1014,18 @@ export default function Dashboard({ user }: DashboardProps) {
                                                     </TableCell>
                                                     <TableCell>
                                                       <div className="flex items-center space-x-2">
-                                                        <div className={`text-sm font-bold ${
-                                                          oeeData.oee >= 85 ? 'text-green-600' :
-                                                          oeeData.oee >= 60 ? 'text-blue-600' :
-                                                          oeeData.oee >= 40 ? 'text-yellow-600' : 'text-red-600'
-                                                        }`}>
+                                                        <div className={`text-sm font-bold ${oeeData.oee >= 85 ? 'text-green-600' :
+                                                            oeeData.oee >= 60 ? 'text-blue-600' :
+                                                              oeeData.oee >= 40 ? 'text-yellow-600' : 'text-red-600'
+                                                          }`}>
                                                           {oeeData.oee}%
                                                         </div>
                                                         <div className="w-12 bg-gray-200 rounded-full h-2">
                                                           <div
-                                                            className={`h-2 rounded-full ${
-                                                              oeeData.oee >= 85 ? 'bg-green-500' :
-                                                              oeeData.oee >= 60 ? 'bg-blue-500' :
-                                                              oeeData.oee >= 40 ? 'bg-yellow-500' : 'bg-red-500'
-                                                            }`}
+                                                            className={`h-2 rounded-full ${oeeData.oee >= 85 ? 'bg-green-500' :
+                                                                oeeData.oee >= 60 ? 'bg-blue-500' :
+                                                                  oeeData.oee >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                                              }`}
                                                             style={{ width: `${Math.min(oeeData.oee, 100)}%` }}
                                                           ></div>
                                                         </div>

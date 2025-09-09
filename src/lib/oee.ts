@@ -1,57 +1,3 @@
-// interface OEECalculation {
-//   availability: number
-//   performance: number
-//   quality: number
-//   oee: number
-// }
-
-// export function calculateOEE(
-//   availableTime: string,    // "480"
-//   lossTime: number,         // 30
-//   lineCapacity: string,     // "100"
-//   goodParts: number,        // 360
-//   rejects: number,          // 40
-//   actualTime?: number       // Optional: actual operating time
-// ): OEECalculation {
-//   // Parse string values
-//   const plannedTime = parseInt(availableTime) || 0
-//   const idealRate = parseInt(lineCapacity) || 0
-  
-//   if (plannedTime <= 0 || idealRate <= 0) {
-//     return { availability: 0, performance: 0, quality: 0, oee: 0 }
-//   }
-  
-//   // Calculate Availability
-//   const operatingTime = plannedTime - lossTime
-//   const availability = (operatingTime / plannedTime) * 100
-  
-//   // Calculate Performance
-//   const totalProduced = goodParts + rejects
-//   const idealProduction = (operatingTime / 60) * idealRate // Convert minutes to hours
-//   const performance = idealProduction > 0 ? (totalProduced / idealProduction) * 100 : 0
-  
-//   // Calculate Quality
-//   const quality = totalProduced > 0 ? (goodParts / totalProduced) * 100 : 0
-  
-//   // Calculate OEE
-//   const oee = (availability * performance * quality) / 10000 // Divide by 10000 since all are percentages
-  
-//   return {
-//     availability: Math.round(availability * 100) / 100,
-//     performance: Math.round(performance * 100) / 100,
-//     quality: Math.round(quality * 100) / 100,
-//     oee: Math.round(oee * 100) / 100
-//   }
-// }
-
-// export function getOEECategory(oee: number): { category: string; color: string } {
-//   if (oee >= 85) return { category: 'World Class', color: 'text-green-600' }
-//   if (oee >= 60) return { category: 'Good', color: 'text-blue-600' }
-//   return { category: 'Needs Improvement', color: 'text-red-600' }
-// }
-
-
-
 export interface OEEData {
   availability: number
   performance: number
@@ -64,26 +10,38 @@ export interface OEECategory {
   color: string
 }
 
-export function calculateOEE(
-  availableTime: string,
-  lossTime: number,
-  lineCapacity: string,
-  goodParts: number,
-  totalParts: number
+export function calculateHourlyOEE(
+  lossTime: number,           // Loss time for this hour in minutes
+  lineCapacity: string,       // "120 u/hr" - theoretical capacity per hour
+  goodParts: number,          // Good parts produced this hour
+  spdParts: number,          // SPD parts produced this hour
+  rejects: number,           // Rejected parts this hour
+  plannedHourTime: number = 60 // Standard hour = 60 minutes
 ): OEEData {
-  // Parse available time (remove "min" suffix)
-  const plannedTime = parseInt(availableTime.replace(' min', '')) || 60
-  const operatingTime = plannedTime - lossTime
-  
   // Parse line capacity (remove "u/hr" suffix)
   const idealRate = parseInt(lineCapacity.replace(' u/hr', '')) || 0
-  const idealProduction = Math.round((idealRate * plannedTime) / 60)
+  
+  // Calculate total parts produced this hour
+  const totalParts = goodParts + spdParts + rejects
+  
+  // Calculate operating time for this hour
+  const operatingTime = plannedHourTime - lossTime
   
   // Calculate OEE components
-  const availability = plannedTime > 0 ? Math.round((operatingTime / plannedTime) * 100) : 0
-  const performance = idealProduction > 0 ? Math.round((totalParts / idealProduction) * 100) : 0
-  const quality = totalParts > 0 ? Math.round((goodParts / totalParts) * 100) : 0
+  // Availability = Operating Time / Planned Time
+  const availability = plannedHourTime > 0 ? 
+    Math.round((operatingTime / plannedHourTime) * 100) : 0
   
+  // Performance = Actual Production / Theoretical Production
+  // For hourly data: actual parts vs line capacity
+  const performance = idealRate > 0 ? 
+    Math.round((totalParts / idealRate) * 100) : 0
+  
+  // Quality = Good Parts / Total Parts
+  const quality = totalParts > 0 ? 
+    Math.round((goodParts / totalParts) * 100) : 0
+  
+  // OEE = Availability × Performance × Quality
   const oee = Math.round((availability * performance * quality) / 10000)
   
   return {
@@ -100,3 +58,30 @@ export function getOEECategory(oee: number): OEECategory {
   if (oee >= 40) return { category: 'Poor', color: 'text-yellow-600' }
   return { category: 'Unacceptable', color: 'text-red-600' }
 }
+
+// Test function with mockup data
+// export function testOEECalculation() {
+//   // Test Case 1: Good Performance
+//   const test1 = calculateHourlyOEE(
+//     5,      // 5 minutes loss time
+//     "120",  // 120 units/hour capacity
+//     100,    // 100 good parts
+//     5,      // 5 SPD parts
+//     10,     // 10 rejects
+//   )
+  
+//   console.log("Test 1 - Good Performance:", test1)
+//   console.log("Category:", getOEECategory(test1.oee))
+  
+//   // Test Case 2: Poor Performance with High Losses
+//   const test2 = calculateHourlyOEE(
+//     20,     // 20 minutes loss time  
+//     "100",  // 100 units/hour capacity
+//     60,     // 60 good parts
+//     2,      // 2 SPD parts
+//     18,     // 18 rejects
+//   )
+  
+//   console.log("Test 2 - Poor Performance:", test2)
+//   console.log("Category:", getOEECategory(test2.oee))
+// }

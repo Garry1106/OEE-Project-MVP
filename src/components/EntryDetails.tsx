@@ -29,7 +29,7 @@ import {
   Settings,
   Edit
 } from 'lucide-react'
-import { calculateOEE, getOEECategory } from '@/lib/oee'
+import { calculateHourlyOEE, getOEECategory } from '@/lib/oee'
 
 interface EntryDetailsProps {
   entry: Entry
@@ -619,6 +619,15 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     <div className="min-h-[20px]">
+                      {entry.materialChange && entry.materialReason ? (
+                        <span className="font-medium">{entry.materialReason}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">No change</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <div className="min-h-[20px]">
                       {entry.materialChange && entry.materialCC ? (
                         <span className="font-medium">{entry.materialCC}</span>
                       ) : (
@@ -846,12 +855,13 @@ export default function EntryDetails({ entry, onClose, onEdit, onApprove, showAc
                   <div className="text-xs text-gray-600">Actual / Target</div>
                 </td>
                 {(() => {
-                  const oeeData = calculateOEE(
-                    entry.availableTime,
+                  const oeeData = calculateHourlyOEE(
                     entry.lossTime,
                     entry.lineCapacity,
-                    totals.totalGood + totals.totalSpd,
-                    totals.totalRejects
+                    totals.totalGood,
+                    totals.totalSpd,
+                    totals.totalRejects,
+                    Number(entry.availableTime) || 60
                   )
                   const category = getOEECategory(oeeData.oee)
 
